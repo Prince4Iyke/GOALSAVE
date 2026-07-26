@@ -52,6 +52,6 @@ export default function Splash() {
       </div>
       <PrimaryButton style={{ marginTop: 60, width: 220 }} onClick={() => navigate("onboard1")}>Get Started</PrimaryButton>
     </div>
-    <footer>2026 Capstone Project by BeTechified</footer>
+    <footer style={{ alignitems: "centre", fontsize: 10, }}>2026 Capstone Project by BeTechified</footer>
   );
 }
