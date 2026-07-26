@@ -1,4 +1,5 @@
 # GoalSave
+This is a Betechified Capstone Project Apr 2026.
 
 GoalSave is a fintech MVP that helps everyday users make better financial
 decisions — building a saving habit, staying on top of a budget, catching
