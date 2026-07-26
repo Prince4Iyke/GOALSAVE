@@ -51,7 +51,7 @@ export default function Splash() {
         <span style={{ fontSize: 24, fontWeight: 900, color: C.navy, fontStyle: "italic" }}>GoalSave</span>
       </div>
       <PrimaryButton style={{ marginTop: 60, width: 220 }} onClick={() => navigate("onboard1")}>Get Started</PrimaryButton>
-      <footer style={{ alignitems: "centre", fontsize: 10, }}>2026 Capstone Project by BeTechified</footer>
+      <footer style={{ alignitems: "centre", fontsize: 10, margintop: 100, }}>2026 Capstone Project by BeTechified</footer>
     </div>
   );
 }
