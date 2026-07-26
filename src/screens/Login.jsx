@@ -41,6 +41,7 @@ export default function Login() {
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: C.card, padding: "50px 22px 26px", overflowY: "auto" }}>
+      <BackHeader title="" onBack={goBack} />
       <h1 style={{ textAlign: "center", color: C.navy, fontSize: 24, fontWeight: 900, marginBottom: 34 }}>WELCOME BACK</h1>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${!phone.trim() && loginError ? C.red : C.green}`, borderRadius: 14, padding: "13px 14px" }}>
