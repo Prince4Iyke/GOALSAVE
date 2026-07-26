@@ -41,6 +41,7 @@ export default function Onboard2() {
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: C.card, padding: "40px 22px 26px", overflowY: "auto" }}>
+      <BackHeader title="" onBack={goBack} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <h2 style={{ textAlign: "center", color: C.navy, fontSize: 22, fontWeight: 800, lineHeight: 1.3 }}>All your finances<br />in one place</h2>
         <p style={{ textAlign: "center", color: C.textMuted, fontSize: 13.5, marginTop: 8, marginBottom: 24 }}>
