@@ -77,7 +77,7 @@ export default function Dashboard() {
   `}</style>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 2px 16px" }}>
-        <h2 style={heading(20, 24, { margin: "20px 0 0", color: C.black, fontSize: 25, textAlign: "left" })}>WELCOME, {name}</h2>
+        <h2 style={heading(20, 24, { margin: "20px 2px 0", color: C.black, fontSize: 25, textAlign: "left" })}>WELCOME, {name}</h2>
         <div style={{ display: "flex", gap: 10 }}>
           <div style={{ cursor: "pointer" }} onClick={() => setDarkMode((d) => !d)}>
             {darkMode ? <Sun size={19} color={T.navy} /> : <Moon size={19} color={T.navy} />}
@@ -94,7 +94,7 @@ export default function Dashboard() {
       {/* Accounts card — gradient green, 20px radius, exactly per spec */}
       <div
         style={{
-         width: "90%", borderRadius: 3, padding: 22, minHeight: 220, margin: "0 0 20px", backgroundImage: "url(/images/visa-card-bg.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "relative", overflow: "hidden", boxShadow: "0 16px 30px -12px rgba(12,122,56,0.45)"
+         width: "90%", borderRadius: 3, padding: 22, minHeight: 220, margin: "0 auto 20px", backgroundImage: "url(/images/visa-card-bg.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "relative", overflow: "hidden", boxShadow: "0 16px 30px -12px rgba(12,122,56,0.45)"
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
