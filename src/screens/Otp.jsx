@@ -44,7 +44,7 @@ export default function Otp() {
     <Screen>
       <BackHeader title="" onBack={goBack} />
       <h2 style={{ color: C.navy, fontSize: 20, fontWeight: 800, textAlign: "center", marginBottom: 4 }}>Verify your phone</h2>
-      <p style={{ color: C.textMuted, fontSize: 13, textAlign: "center" }}>Enter the 6-digit code sent to<br /><b style={{ color: C.navy }}>0802 123 4567</b></p>
+      <p style={{ color: C.textMuted, fontSize: 13, textAlign: "center" }}>Enter the 6-digit code sent to<br /><b style={{ color: C.navy }}>{signupPhone || "your phone"}</b></p>
       <div style={{ display: "flex", gap: 8, justifyContent: "center", margin: "22px 0 10px" }}>
         {otp.map((d, i) => (
           <input key={i} value={d} maxLength={1} onChange={(e) => { const c = [...otp]; c[i] = e.target.value.replace(/\D/, ""); setOtp(c); }}
