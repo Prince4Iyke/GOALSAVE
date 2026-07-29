@@ -43,7 +43,7 @@ export default function Login() {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: C.card, padding: "50px 22px 26px", overflowY: "auto" }}>
       <BackHeader style={{ marginBottom: 1, }}  title="" onBack={goBack} />
-      <h1 style={{ textAlign: "center", color: C.navy, fontSize: 35, fontWeight: 700, margin: "80px auto 60px" }}>WELCOME BACK</h1>
+      <h1 style={{ textAlign: "center", color: C.navy, fontSize: 35, fontWeight: 700, margin: "60px auto 60px" }}>WELCOME BACK</h1>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${!phone.trim() && loginError ? C.red : C.green}`, borderRadius: 5, height: 40, padding: "13px 14px" }}>
           <span style={{ fontSize: 20, fontWeight: 700, color: "gray" }}>🇳🇬 +234</span>
