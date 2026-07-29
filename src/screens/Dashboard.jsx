@@ -160,7 +160,7 @@ export default function Dashboard() {
           marginBottom: 16,
           cursor: "pointer",
           background: T.white,
-          width: 350,
+          width: "80%",
           margin: "5px 23px 3px",
         }}
       >
