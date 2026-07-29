@@ -66,7 +66,7 @@ export default function Onboard1() {
     fontSize: 28,
     fontWeight: 300,
     lineHeight: "24px",
-    letterSpacing: "3px",
+    letterSpacing: "2px",
     fontVariantNumeric: "tabular-nums",
     textTransform: "uppercase",
     color: "#FFFFFF",
@@ -81,7 +81,7 @@ export default function Onboard1() {
             alignItems: "center" }}>
             <TrendingUp color="#fff" size={22} />
             <span style={{ position: "absolute",
-            margin: "0 310px 0",
+            margin: "0 290px 0",
             top: 230,
             fontFamily: "'Istok Web', sans-serif",
             fontSize: 24,
