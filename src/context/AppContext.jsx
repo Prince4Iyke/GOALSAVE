@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from "react";
 import { Target } from "lucide-react";
 import { buildInitialTransactions, buildInitialGoals, buildInitialNotifications, budgetCategoryOptions } from "../data";
-import { toISODate } from "../utils";
+import { toISODate, formatTime } from "../utils";
 import { fmtNShort } from "../theme";
 import { USE_MOCK_DATA, ApiError } from "../api/client";
 import { AuthAPI, ProfileAPI, BudgetAPI, TransactionsAPI, IncomeAPI, GoalsAPI, NotificationsAPI, SecurityAPI } from "../api/endpoints";
@@ -151,6 +151,7 @@ export function AppProvider({ children }) {
     setLoginError("");
 
     if (USE_MOCK_DATA) {
+      setProfilePhone(phone.trim());
       goToTab("dashboard");
       return;
     }
@@ -192,6 +193,8 @@ export function AppProvider({ children }) {
     if (Object.keys(errs).length > 0) return;
 
     if (USE_MOCK_DATA) {
+      setProfileEmail(signupEmail.trim());
+      setProfilePhone(signupPhone.trim());
       navigate("otp");
       return;
     }
