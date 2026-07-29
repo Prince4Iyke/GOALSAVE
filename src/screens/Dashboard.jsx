@@ -175,7 +175,7 @@ export default function Dashboard() {
         </div>
 
         {/* thick-line progress, per spec: 10px grey border track + 10px green border fill */}
-        <div style={{ margin: "-10px 40px 20px", position: "relative", width: 300, height: 0 }}>
+        <div style={{ margin: "-10px 40px auto", position: "relative", width: 300, height: 0 }}>
           <div style={{ width: "100%", borderTop: `10px solid ${T.grey}`, borderRadius: 5 }} />
           <div
             style={{
