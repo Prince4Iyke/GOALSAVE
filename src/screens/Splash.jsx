@@ -53,7 +53,7 @@ export default function Splash() {
 
       {/* Frame 1171275253 — bordered stencil "GoalSave" wordmark */}
       <div style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
+        display: "flex", alignItems: "center", justifyContent: "center", margin: "30px auto 0",
         width: 216, height: 60, padding: 10,
         border: "3px solid #070540", borderRadius: 10,
       }}>
