@@ -50,18 +50,18 @@ export default function Onboard2() {
         overflowY: "auto",
       }}
     >
-      <BackHeader title="" onBack={goBack} />
+     <BackHeader style={{ margin: "10px auto 2px" }} title="" onBack={goBack} />
 
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          margin: "-100px 0 0",
-        }}
-      >
+<div
+  style={{
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -20, // small, safe offset instead of -100
+  }}
+>
         <h2
           style={{
             textAlign: "center",
@@ -70,6 +70,7 @@ export default function Onboard2() {
             fontWeight: 800,
             lineHeight: 1.3,
             letterSpacing: "-0.3px",
+            margin: "-30px auto 2px"
           }}
         >
           All your finances
