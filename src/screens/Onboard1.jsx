@@ -43,7 +43,7 @@ export default function Onboard1() {
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: C.card, padding: "40px 22px 26px", overflowY: "auto" }}>
-      <BackHeader style={{margin: "10px auto 1px",}}   title="" onBack={goBack} />
+      <BackHeader title="" onBack={goBack} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ width: "90%", borderRadius: 20, padding: 22, minHeight: 220, marginTop: 2, backgroundImage: "url(/images/visa-card-bg.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "relative", overflow: "hidden", boxShadow: "0 16px 30px -12px rgba(12,122,56,0.45)" }}>
           <div 
