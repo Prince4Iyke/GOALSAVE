@@ -107,7 +107,7 @@ export default function Profile() {
       <div
         onClick={() => navigate("personalInfo")}
         style={{
-         width: "90%", borderRadius: 2, padding: 22, minHeight: 220, marginTop: 2, backgroundImage: "url(/images/visa-card-bg.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "relative", overflow: "hidden", boxShadow: "0 16px 30px -12px rgba(12,122,56,0.45)"
+         width: "91%", borderRadius: 2, padding: 22, minHeight: 220, marginTop: 2, backgroundImage: "url(/images/visa-card-bg.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "relative", overflow: "hidden", boxShadow: "0 16px 30px -12px rgba(12,122,56,0.45)"
         }}
       >
         
@@ -116,7 +116,7 @@ export default function Profile() {
                 transform: "scaleX(1.3)",
                 transformOrigin: "center",
                 position: "absolute",
-              }} size={60} color="#fff" strokeWidth={1.2} />
+              }} size={40} color="#fff" strokeWidth={1.2} />
           <div style={{ flex: 1 }}>
             <div
               style={{
@@ -162,10 +162,10 @@ export default function Profile() {
         style={{
           background: "#fff",
           borderRadius: "20px 20px 0 0",
-          margin: "-70px 3px 0",
+          margin: "-70px 3.5px 0",
           position: "relative",
           padding: "20px 10px 0",
-          width: 400,
+          width: "95%"
         }}
       >
         <h4
