@@ -17,7 +17,7 @@ export default function PersonalInfo() {
   const ctx = useApp();
   const C = useTheme();
   const {
-    screen, setScreen, history, setHistory, name, setName, darkMode, setDarkMode,
+    screen, setScreen, history, setHistory, name, setName, lastName, setLastName, darkMode, setDarkMode,
     biometricEnabled, setBiometricEnabled, twoFactorEnabled, setTwoFactorEnabled, toast, setToast, showToast, profileEmail,
     setProfileEmail, profilePhone, setProfilePhone, isEditingProfile, setIsEditingProfile, transactions, setTransactions, goals,
     setGoals, notifications, setNotifications, income, setIncome, currency, setCurrency, budgetCats,
@@ -40,6 +40,8 @@ export default function PersonalInfo() {
     handleSaveProfile,
   } = ctx;
 
+  const fullName = [name, lastName].filter(Boolean).join(" ");
+
   return (
     <Screen nav active="profile" onNavigate={goToTab}>
       <BackHeader title="Personal Information" onBack={goBack} />
@@ -47,18 +49,30 @@ export default function PersonalInfo() {
         <div style={{ width: 68, height: 68, borderRadius: 34, background: CARD_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
           <User size={30} color="#fff" />
         </div>
-        <span style={{ fontWeight: 800, color: C.navy, fontSize: 15 }}>{name}</span>
+        <span style={{ fontWeight: 800, color: C.navy, fontSize: 15 }}>{fullName}</span>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 6 }}>Full Name</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 6 }}>First Name</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${isEditingProfile ? C.green : C.border}`, borderRadius: 14, padding: "13px 14px", background: isEditingProfile ? "#fff" : C.bg }}>
             <User size={16} color={C.textMuted} />
             <input
               value={name}
               disabled={!isEditingProfile}
               onChange={(e) => setName(e.target.value)}
+              style={{ border: "none", outline: "none", flex: 1, fontSize: 14, fontWeight: 600, color: C.navy, background: "transparent" }}
+            />
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 6 }}>Last Name</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${isEditingProfile ? C.green : C.border}`, borderRadius: 14, padding: "13px 14px", background: isEditingProfile ? "#fff" : C.bg }}>
+            <User size={16} color={C.textMuted} />
+            <input
+              value={lastName}
+              disabled={!isEditingProfile}
+              onChange={(e) => setLastName(e.target.value)}
               style={{ border: "none", outline: "none", flex: 1, fontSize: 14, fontWeight: 600, color: C.navy, background: "transparent" }}
             />
           </div>
@@ -83,7 +97,8 @@ export default function PersonalInfo() {
               value={profilePhone}
               disabled={!isEditingProfile}
               onChange={(e) => setProfilePhone(e.target.value)}
-              style={{ border: "none", outline: "none", flex: 1, fontSize: 14, fontWeight: 600, color: C.navy, background: "transparent" }}
+              placeholder="Not provided"
+              style={{ border: "none", outline: "none", flex: 1, fontSize: 14, fontWeight: 600, color: profilePhone ? C.navy : C.textMuted, background: "transparent" }}
             />
           </div>
         </div>
