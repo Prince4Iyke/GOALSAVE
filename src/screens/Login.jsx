@@ -23,6 +23,7 @@ export default function Login() {
     setGoals, notifications, setNotifications, income, setIncome, currency, setCurrency, budgetCats,
     setBudgetCats, allocations, setAllocations, notifFilter, setNotifFilter, txFilter, setTxFilter, navigate,
     goToTab, goBack, totalIncome, setTotalIncome, totalExpenses, totalAllocated, phone, setPhone,
+    loginEmail, setLoginEmail,
     pin, setPin, showLoginPw, setShowLoginPw, rememberPassword, setRememberPassword, loginError, setLoginError,
     handleLogin, showPw, setShowPw, signupEmail, setSignupEmail, signupPhone, setSignupPhone, signupPassword,
     setSignupPassword, signupErrors, setSignupErrors, validatePassword, handleCreateAccount, clearErr, otp, setOtp,
@@ -45,17 +46,17 @@ export default function Login() {
       <BackHeader style={{ margin: "10px 0 2px" }}  title="" onBack={goBack} />
       <h1 style={{ textAlign: "center", color: C.navy, fontSize: 35, fontWeight: 700, margin: "40px auto 60px" }}>WELCOME BACK</h1>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${!phone.trim() && loginError ? C.red : C.green}`, borderRadius: 5, height: 40, padding: "13px 14px" }}>
-          <span style={{ fontSize: 20, fontWeight: 700, color: "gray" }}>🇳🇬 +234</span>
-          <input value={phone} onChange={(e) => { setPhone(e.target.value); if (loginError) setLoginError(""); }} placeholder="Enter Phone Number" style={{ border: "none", outline: "none", flex: 1, fontSize: 20, background: "transparent" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${!loginEmail.trim() && loginError ? C.red : C.green}`, borderRadius: 5, height: 40, padding: "13px 14px" }}>
+          <Mail size={20} color="gray" />
+          <input value={loginEmail} onChange={(e) => { setLoginEmail(e.target.value); if (loginError) setLoginError(""); }} placeholder="Enter Email Address" style={{ border: "none", outline: "none", flex: 1, fontSize: 20, background: "transparent" }} />
           <span style={{ color: C.red, fontWeight: 900 }}>*</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${(!pin.trim() || !validatePassword(pin)) && loginError ? C.red : C.green}`, borderRadius: 5, height: 40, padding: "13px 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${!pin.trim() && loginError ? C.red : C.green}`, borderRadius: 5, height: 40, padding: "13px 14px" }}>
           <input
             type={showLoginPw ? "text" : "password"}
             value={pin}
             onChange={(e) => { setPin(e.target.value); if (loginError) setLoginError(""); }}
-            placeholder="Enter 6-digits password"
+            placeholder="Enter password"
             style={{ border: "none", outline: "none", width: "100%", fontSize: 20, color: "gray", background: "transparent" }}
           />
           <button onClick={() => setShowLoginPw((s) => !s)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex" }}>
@@ -79,7 +80,7 @@ export default function Login() {
           </span>
         </div>
       </div>
-      
+
         <PrimaryButton style={{ 
           width: 150, 
           margin: "30px auto 15px",
