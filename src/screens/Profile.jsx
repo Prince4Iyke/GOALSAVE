@@ -78,7 +78,8 @@ function Row({ r, showBorder, onClick }) {
 export default function Profile() {
   const ctx = useApp();
   useTheme(); // kept for provider/context parity with the rest of the app
-  const { name, profileEmail, navigate, goToTab, showToast } = ctx;
+  const { name, lastName, profileEmail, navigate, goToTab, showToast } = ctx;
+  const fullName = [name, lastName].filter(Boolean).join(" ");
 
   const accountRows = [
     { l: "Personal Information", icon: User, go: "personalInfo" },
@@ -129,7 +130,7 @@ export default function Profile() {
                 margin: "50px 100px 0"
               }}
             >
-              {name}
+              {fullName}
             </div>
             <div
               style={{
