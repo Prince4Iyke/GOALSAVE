@@ -24,7 +24,7 @@ export default function SignUp() {
     setBudgetCats, allocations, setAllocations, notifFilter, setNotifFilter, txFilter, setTxFilter, navigate,
     goToTab, goBack, totalIncome, setTotalIncome, totalExpenses, totalAllocated, phone, setPhone,
     pin, setPin, showLoginPw, setShowLoginPw, rememberPassword, setRememberPassword, loginError, setLoginError,
-    handleLogin, showPw, setShowPw, signupEmail, setSignupEmail, signupPhone, setSignupPhone, signupPassword,
+    handleLogin, showPw, setShowPw, lastName, setLastName, signupEmail, setSignupEmail, signupPhone, setSignupPhone, signupPassword,
     setSignupPassword, signupErrors, setSignupErrors, validatePassword, handleCreateAccount, clearErr, otp, setOtp,
     resendSeconds, setResendSeconds, currencies, budgetStep, setBudgetStep, incomeType, setIncomeType, customIncomeInputRef,
     steps, toggleCat, spendingBreakdown, donutGradient, emergency, unreadCount, expAmount, setExpAmount,
@@ -48,9 +48,16 @@ export default function SignUp() {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${signupErrors.name ? C.red : C.border}`, borderRadius: 14, padding: "13px 14px", background: C.card }}>
             <User size={17} color={C.textMuted} />
-            <input value={name} onChange={(e) => { setName(e.target.value); clearErr("name"); }} placeholder="Full Name" style={{ border: "none", outline: "none", flex: 1, fontSize: 14, fontWeight: 600, color: C.navy, background: "transparent" }} />
+            <input value={name} onChange={(e) => { setName(e.target.value); clearErr("name"); }} placeholder="First Name" style={{ border: "none", outline: "none", flex: 1, fontSize: 14, fontWeight: 600, color: C.navy, background: "transparent" }} />
           </div>
           {signupErrors.name && <p style={{ color: C.red, fontSize: 11, fontWeight: 700, margin: "4px 0 0" }}>{signupErrors.name}</p>}
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${signupErrors.lastName ? C.red : C.border}`, borderRadius: 14, padding: "13px 14px", background: C.card }}>
+            <User size={17} color={C.textMuted} />
+            <input value={lastName} onChange={(e) => { setLastName(e.target.value); clearErr("lastName"); }} placeholder="Last Name" style={{ border: "none", outline: "none", flex: 1, fontSize: 14, fontWeight: 600, color: C.navy, background: "transparent" }} />
+          </div>
+          {signupErrors.lastName && <p style={{ color: C.red, fontSize: 11, fontWeight: 700, margin: "4px 0 0" }}>{signupErrors.lastName}</p>}
         </div>
         <div style={{ marginTop: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1.5px solid ${signupErrors.email ? C.red : C.border}`, borderRadius: 14, padding: "13px 14px", background: C.card }}>
