@@ -61,7 +61,7 @@ export function AppProvider({ children }) {
           SecurityAPI.get().catch(() => null),
         ]);
         if (me?.user) {
-          setName(me.user.name || me.user.fullName || "");
+          setName(me.user.name || me.user.fullName || me.user.firstName || "");
           setProfileEmail(me.user.email || "");
           setProfilePhone(me.user.phone || "");
         }
@@ -116,6 +116,7 @@ export function AppProvider({ children }) {
   /* ------------------------------- LOGIN ------------------------------- */
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
   const [showLoginPw, setShowLoginPw] = useState(false);
   const [rememberPassword, setRememberPassword] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -136,44 +137,49 @@ export function AppProvider({ children }) {
     }
   };
   const handleLogin = async () => {
-    if (!phone.trim() && !pin.trim()) {
-      setLoginError("Phone number and password are required.");
-      return;
-    }
-    if (!phone.trim()) {
-      setLoginError("Phone number is required.");
-      return;
-    }
-    if (!pin.trim() || !validatePassword(pin)) {
-      setLoginError("Enter your password (min 8 characters, 1 number, 1 special character).");
-      return;
-    }
-    setLoginError("");
+  if (!loginEmail.trim() && !pin.trim()) {
+    setLoginError("Email and password are required.");
+    return;
+  }
+  if (!loginEmail.trim()) {
+    setLoginError("Email address is required.");
+    return;
+  }
+  if (!/^\S+@\S+\.\S+$/.test(loginEmail.trim())) {
+    setLoginError("Enter a valid email address.");
+    return;
+  }
+  if (!pin.trim()) {
+    setLoginError("Password is required.");
+    return;
+  }
+  setLoginError("");
 
-    if (USE_MOCK_DATA) {
-      setProfilePhone(phone.trim());
-      goToTab("dashboard");
-      return;
-    }
+  if (USE_MOCK_DATA) {
+    setProfileEmail(loginEmail.trim());
+    goToTab("dashboard");
+    return;
+  }
 
-    setApiBusy(true);
-    try {
-      const data = await AuthAPI.login({ phone: phone.trim(), password: pin });
-      if (data?.user) {
-        setName(data.user.name || data.user.fullName || "");
-        setProfileEmail(data.user.email || "");
-        setProfilePhone(data.user.phone || phone.trim());
-      }
-      goToTab("dashboard");
-    } catch (err) {
-      setLoginError(err instanceof ApiError ? err.message : "Login failed. Please try again.");
-    } finally {
-      setApiBusy(false);
+  setApiBusy(true);
+  try {
+    const data = await AuthAPI.login({ email: loginEmail.trim(), password: pin });
+    if (data?.user) {
+      setName(data.user.name || `${data.user.firstName || ""} ${data.user.lastName || ""}`.trim());
+      setProfileEmail(data.user.email || loginEmail.trim());
+      setProfilePhone(data.user.phone || "");
     }
-  };
+    goToTab("dashboard");
+  } catch (err) {
+    setLoginError(err instanceof ApiError ? err.message : "Login failed. Please try again.");
+  } finally {
+    setApiBusy(false);
+  }
+};
 
   /* ------------------------------ SIGN UP ------------------------------ */
   const [showPw, setShowPw] = useState(false);
+  const [lastName, setLastName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
@@ -183,7 +189,8 @@ export function AppProvider({ children }) {
 
   const handleCreateAccount = async () => {
     const errs = {};
-    if (!name.trim()) errs.name = "Full name is required.";
+    if (!name.trim()) errs.name = "First name is required.";
+    if (!lastName.trim()) errs.lastName = "Last name is required.";
     if (!signupEmail.trim()) errs.email = "Email address is required.";
     else if (!/^\S+@\S+\.\S+$/.test(signupEmail.trim())) errs.email = "Enter a valid email address.";
     if (!signupPhone.trim()) errs.phone = "Phone number is required.";
@@ -195,19 +202,22 @@ export function AppProvider({ children }) {
     if (USE_MOCK_DATA) {
       setProfileEmail(signupEmail.trim());
       setProfilePhone(signupPhone.trim());
-      navigate("otp");
+      navigate("income");
       return;
     }
 
     setApiBusy(true);
     try {
+      // Backend signup schema only accepts: firstName, lastName, email, password.
+      // Phone is still collected in the UI (for later profile/OTP use) but must
+      // NOT be sent to /auth/signup, or Joi will reject it as an unknown field.
       await AuthAPI.signup({
-        fullName: name.trim(),
+        firstName: name.trim(),
+        lastName: lastName.trim(),
         email: signupEmail.trim(),
-        phone: signupPhone.trim(),
         password: signupPassword,
       });
-      navigate("otp");
+      navigate("income");
     } catch (err) {
       setSignupErrors({ email: err instanceof ApiError ? err.message : "Sign up failed. Please try again." });
     } finally {
@@ -243,7 +253,7 @@ export function AppProvider({ children }) {
     try {
       const data = await AuthAPI.verifyOtp({ phone: signupPhone.trim(), code });
       if (data?.user) {
-        setName(data.user.name || data.user.fullName || "");
+        setName(data.user.name || data.user.fullName || data.user.firstName || "");
         setProfileEmail(data.user.email || "");
         setProfilePhone(data.user.phone || signupPhone.trim());
       }
@@ -570,9 +580,9 @@ export function AppProvider({ children }) {
     setProfileEmail, profilePhone, setProfilePhone, isEditingProfile, setIsEditingProfile, transactions, setTransactions, goals,
     setGoals, notifications, setNotifications, income, setIncome, currency, setCurrency, budgetCats,
     setBudgetCats, allocations, setAllocations, notifFilter, setNotifFilter, txFilter, setTxFilter, navigate,
-    goToTab, goBack, totalIncome, setTotalIncome, totalExpenses, totalAllocated, phone, setPhone,
+    goToTab, goBack, totalIncome, setTotalIncome, totalExpenses, totalAllocated, phone, setPhone,loginEmail, setLoginEmail,
     pin, setPin, showLoginPw, setShowLoginPw, rememberPassword, setRememberPassword, loginError, setLoginError,
-    handleLogin, showPw, setShowPw, signupEmail, setSignupEmail, signupPhone, setSignupPhone, signupPassword,
+    handleLogin, showPw, setShowPw, lastName, setLastName, signupEmail, setSignupEmail, signupPhone, setSignupPhone, signupPassword,
     setSignupPassword, signupErrors, setSignupErrors, validatePassword, handleCreateAccount, clearErr, otp, setOtp,
     resendSeconds, setResendSeconds, currencies, budgetStep, setBudgetStep, incomeType, setIncomeType, customIncomeInputRef,
     steps, toggleCat, spendingBreakdown, donutGradient, emergency, unreadCount, expAmount, setExpAmount,
