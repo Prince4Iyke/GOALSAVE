@@ -41,6 +41,18 @@ export default function SignUp() {
 
   return (
     <Screen>
+      <style>{`
+    /* Hide scrollbars everywhere (desktop + mobile) while keeping scroll functional */
+    html, body, * {
+      scrollbar-width: none;      /* Firefox */
+      -ms-overflow-style: none;   /* IE / old Edge */
+    }
+    *::-webkit-scrollbar {        /* Chrome, Safari, new Edge, mobile WebKit */
+      display: none;
+      width: 0;
+      height: 0;
+    }
+  `}</style>
       <BackHeader title="" onBack={goBack} />
       <h2 style={{ color: C.navy, fontSize: 20, fontWeight: 800, marginBottom: 2 }}>Create your account</h2>
       <p style={{ color: C.textMuted, fontSize: 13, marginBottom: 18 }}>Let's get you started</p>
