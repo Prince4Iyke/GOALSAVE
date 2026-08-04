@@ -7,7 +7,7 @@
 //                         useful while the backend doesn't exist yet or is down.
 //                         Set to "false" once real endpoints are ready.
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://goalsave-api.onrender.com/api/v1";
 export const USE_MOCK_DATA = (import.meta.env.VITE_USE_MOCK_DATA ?? "true") !== "false";
 
 const TOKEN_KEY = "goalsave_token";
