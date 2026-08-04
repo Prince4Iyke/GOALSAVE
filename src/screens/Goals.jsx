@@ -5,7 +5,7 @@ import {
   Target, ChevronRight, ChevronDown, Check, Eye, EyeOff, Mail, Phone, Smartphone,
   Building2, HelpCircle, LogOut, AlertTriangle, Star, ShieldAlert, Utensils, Bus,
   Receipt, ShoppingBag, Film, Zap, GraduationCap, Plane, Key, MoreHorizontal,
-  Moon, Sun, Coins, BarChart3, Clock, Briefcase, Store,
+  Moon, Sun, Coins, BarChart3, Clock, Briefcase, Store, Pencil, Trash2,
   HeartPulse, HandCoins,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
@@ -115,8 +115,12 @@ export default function Goals() {
     activeLabels, goToPrevMonth, goToNextMonth, contribAmount, setContribAmount, contributionHistory, setContributionHistory, showAllHistory,
     setShowAllHistory, showAddGoal, setShowAddGoal, newGoalName, setNewGoalName, newGoalTarget, setNewGoalTarget, expandedGoalId,
     setExpandedGoalId, otherContribAmount, setOtherContribAmount, others, addContribution, filteredNotifs, notifGrouped,
-    handleCreateGoal,
+    handleCreateGoal, editGoal, deleteGoal, editContribution, deleteContribution,
   } = ctx;
+
+  const [editingGoal, setEditingGoal] = useState(null); // { id, name, target } | null
+  const [editingHistoryId, setEditingHistoryId] = useState(null);
+  const [editingHistoryAmount, setEditingHistoryAmount] = useState("");
 
   return (
     <Screen nav active="goals" onNavigate={goToTab}>
@@ -146,8 +150,26 @@ export default function Goals() {
           <div style={{ width: 62, height: 62, borderRadius: 31, background: `conic-gradient(#fff ${(emergency.saved / emergency.target) * 360 || 252}deg, rgba(255,255,255,0.35) 0deg)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ width: 44, height: 44, borderRadius: 22, background: C.greenDark }} />
           </div>
-          <div>
-            <div style={{ color: "#fff", fontWeight: 800, fontSize: 14 }}>Emergency Fund</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ color: "#fff", fontWeight: 800, fontSize: 14 }}>Emergency Fund</div>
+              {emergency.id && (
+                <>
+                  <Pencil
+                    size={13}
+                    color="rgba(255,255,255,0.85)"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => setEditingGoal({ id: emergency.id, name: emergency.name, target: String(emergency.target) })}
+                  />
+                  <Trash2
+                    size={13}
+                    color="rgba(255,255,255,0.85)"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => { if (window.confirm("Delete Emergency Fund? This can't be undone.")) deleteGoal(emergency.id); }}
+                  />
+                </>
+              )}
+            </div>
             <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 11.5 }}>{fmtN(emergency.saved)} of {fmtN(emergency.target)}</div>
             <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 11.5 }}>Estimated date of completion</div>
             <div style={{ color: "#fff", fontSize: 11.5, fontWeight: 700 }}>{emergency.due}</div>
@@ -188,15 +210,61 @@ export default function Goals() {
         {contributionHistory.length === 0 ? (
           <div style={{ padding: 18, textAlign: "center", color: C.textMuted, fontSize: 12.5 }}>No contributions yet — add one above to get started.</div>
         ) : (
-          (showAllHistory ? contributionHistory : contributionHistory.slice(0, 3)).map((h, i, arr) => (
-            <div key={h.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 10px", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 14, border: `1.5px solid ${C.navy}`, display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={13} color={C.navy} /></div>
-                <span style={{ fontSize: 12.5, color: C.navy, fontWeight: 600 }}>Added to {h.goalName}</span>
+          (showAllHistory ? contributionHistory : contributionHistory.slice(0, 3)).map((h, i, arr) => {
+            const isEditingThis = editingHistoryId === h.id;
+            return (
+              <div key={h.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 10px", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 14, border: `1.5px solid ${C.navy}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Plus size={13} color={C.navy} /></div>
+                  <span style={{ fontSize: 12.5, color: C.navy, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Added to {h.goalName}</span>
+                </div>
+                {isEditingThis ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    <input
+                      autoFocus
+                      value={editingHistoryAmount}
+                      onChange={(e) => setEditingHistoryAmount(e.target.value.replace(/\D/g, ""))}
+                      style={{ width: 70, border: `1.5px solid ${C.border}`, borderRadius: 8, padding: "5px 6px", fontSize: 12, color: C.navy, outline: "none", background: "transparent" }}
+                    />
+                    <Check
+                      size={16}
+                      color={C.green}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => { editContribution(h.id, editingHistoryAmount); setEditingHistoryId(null); }}
+                    />
+                    <ArrowLeft
+                      size={14}
+                      color={C.textMuted}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setEditingHistoryId(null)}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                    <div style={{ textAlign: "right" }}><div style={{ fontWeight: 700, color: C.navy, fontSize: 12.5 }}>{fmtNShort(h.amount)}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted }}>{h.time}</div>
+                    </div>
+                    {h.goalId && (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <Pencil
+                          size={14}
+                          color={C.textMuted}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => { setEditingHistoryId(h.id); setEditingHistoryAmount(String(h.amount)); }}
+                        />
+                        <Trash2
+                          size={14}
+                          color={C.textMuted}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => { if (window.confirm("Delete this contribution?")) deleteContribution(h.id); }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div style={{ textAlign: "right" }}><div style={{ fontWeight: 700, color: C.navy, fontSize: 12.5 }}>{fmtNShort(h.amount)}</div><div style={{ fontSize: 10, color: C.textMuted }}>{h.time}</div></div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -215,9 +283,25 @@ export default function Goals() {
               onClick={() => { setExpandedGoalId(isExpanded ? null : g.id); setOtherContribAmount(""); }}
               style={{ borderRadius: 14, padding: 14, background: `linear-gradient(135deg, ${C.greenDarker}, ${C.greenDark})`, cursor: "pointer" }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                <GoalIcon size={18} color="#fff" />
-                <span style={{ color: "#fff", fontWeight: 800, fontSize: 13.5 }}>{g.name}</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <GoalIcon size={18} color="#fff" />
+                  <span style={{ color: "#fff", fontWeight: 800, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</span>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                  <Pencil
+                    size={14}
+                    color="rgba(255,255,255,0.85)"
+                    style={{ cursor: "pointer" }}
+                    onClick={(e) => { e.stopPropagation(); setEditingGoal({ id: g.id, name: g.name, target: String(g.target) }); }}
+                  />
+                  <Trash2
+                    size={14}
+                    color="rgba(255,255,255,0.85)"
+                    style={{ cursor: "pointer" }}
+                    onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete "${g.name}"? This can't be undone.`)) deleteGoal(g.id); }}
+                  />
+                </div>
               </div>
               <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 11.5, marginBottom: 6 }}>{fmtN(g.saved)} / {fmtN(g.target)}</div>
               <ProgressBar pct={(g.saved / g.target) * 100} color="#fff" track="rgba(255,255,255,0.25)" height={6} />
@@ -228,7 +312,7 @@ export default function Goals() {
                     value={otherContribAmount}
                     onChange={(e) => setOtherContribAmount(e.target.value.replace(/\D/g, ""))}
                     placeholder="Amount to add"
-                    style={{ width: "100%", border: "1px solid rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 10, color: "#fff", fontWeight: 700, outline: "none" }}
+                    style={{ width: "90%", marginLeft: 10, border: "1px solid rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 10, color: "#fff", fontWeight: 700, outline: "none" }}
                   />
                   <button
                     onClick={() => {
@@ -259,11 +343,11 @@ export default function Goals() {
             <h3 style={{ color: C.navy, fontSize: 15, fontWeight: 800, marginBottom: 14 }}>New Saving Goal</h3>
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 11.5, color: C.textMuted, marginBottom: 4 }}>Goal Name</div>
-              <input value={newGoalName} onChange={(e) => setNewGoalName(e.target.value)} placeholder="e.g. New Laptop" style={{ width: "100%", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: 10, fontSize: 13, color: C.navy, outline: "none", background: "transparent" }} />
+              <input value={newGoalName} onChange={(e) => setNewGoalName(e.target.value)} placeholder="e.g. New Laptop" style={{ width: "90%", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: 10, fontSize: 13, color: C.navy, outline: "none", background: "transparent" }} />
             </div>
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11.5, color: C.textMuted, marginBottom: 4 }}>Target Amount</div>
-              <input value={newGoalTarget} onChange={(e) => setNewGoalTarget(e.target.value.replace(/\D/g, ""))} placeholder="0.00" style={{ width: "100%", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: 10, fontSize: 13, color: C.navy, outline: "none", background: "transparent" }} />
+              <input value={newGoalTarget} onChange={(e) => setNewGoalTarget(e.target.value.replace(/\D/g, ""))} placeholder="0.00" style={{ width: "90%", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: 10, fontSize: 13, color: C.navy, outline: "none", background: "transparent" }} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setShowAddGoal(false)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "transparent", color: C.textMuted, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
@@ -277,6 +361,43 @@ export default function Goals() {
           </div>
         </div>
       )}
+
+      {editingGoal && (
+        <div
+          onClick={() => setEditingGoal(null)}
+          style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, borderRadius: 16, padding: 20, width: "100%", maxWidth: 300 }}>
+            <h3 style={{ color: C.navy, fontSize: 15, fontWeight: 800, marginBottom: 14 }}>Edit Goal</h3>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11.5, color: C.textMuted, marginBottom: 4 }}>Goal Name</div>
+              <input
+                value={editingGoal.name}
+                onChange={(e) => setEditingGoal((g) => ({ ...g, name: e.target.value }))}
+                style={{ width: "100%", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: 10, fontSize: 13, color: C.navy, outline: "none", background: "transparent" }}
+              />
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11.5, color: C.textMuted, marginBottom: 4 }}>Target Amount</div>
+              <input
+                value={editingGoal.target}
+                onChange={(e) => setEditingGoal((g) => ({ ...g, target: e.target.value.replace(/\D/g, "") }))}
+                style={{ width: "100%", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: 10, fontSize: 13, color: C.navy, outline: "none", background: "transparent" }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setEditingGoal(null)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "transparent", color: C.textMuted, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
+              <button
+                onClick={() => { editGoal(editingGoal.id, { name: editingGoal.name, target: editingGoal.target }); setEditingGoal(null); }}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", background: C.green, color: "#fff", fontWeight: 800, cursor: "pointer" }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </Screen>
   );
 }
