@@ -55,9 +55,13 @@ export default function Notifications() {
       {/* Filter pills — matches Frame 1171275390 spacing/sizing from spec.
           "Security" was removed: there's no backend data source for it at
           all (SecurityAPI is unbuilt, same as NotificationsAPI), so keeping
-          the pill visible would imply monitoring that doesn't exist. */}
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, padding: "10px 0", marginBottom: 10 }}>
-        {["All", "Alerts", "Bills", "Goals"].map((c) => (
+          the pill visible would imply monitoring that doesn't exist.
+          "Transactions" was added: every real transaction (income and
+          expense) now generates a notification entry (see AppContext.jsx's
+          generatedNotifications) so people can see their activity feed on
+          this screen, not just alerts/bills/goals. */}
+      <div className="hide-scrollbar" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, padding: "10px 0", marginBottom: 10, overflowX: "auto" }}>
+        {["All", "Alerts", "Transactions", "Bills", "Goals"].map((c) => (
           <button
             key={c}
             onClick={() => setNotifFilter(c)}
@@ -100,6 +104,12 @@ export default function Notifications() {
         </div>
       )}
 
+      {Object.keys(notifGrouped).length === 0 && (
+        <div style={{ textAlign: "center", color: "#8A8A8A", fontFamily: FONT, fontSize: 13, padding: "24px 0" }}>
+          Nothing here yet.
+        </div>
+      )}
+
       {Object.entries(notifGrouped).map(([group, items]) => (
         <div key={group} style={{ marginBottom: 16 }}>
           <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 400, lineHeight: "24px", color: "#000000", marginBottom: 8 }}>
@@ -122,6 +132,10 @@ export default function Notifications() {
                   if (n.cat === "Alerts") {
                     if (n.relatedCategory) setTxFilter(n.relatedCategory);
                     else setTxFilter("All");
+                    goToTab("transactions");
+                  }
+                  else if (n.cat === "Transactions") {
+                    setTxFilter(n.relatedCategory || "All");
                     goToTab("transactions");
                   }
                   else if (n.cat === "Bills") { setTxFilter("Bills"); goToTab("transactions"); }
