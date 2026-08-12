@@ -1,11 +1,15 @@
-import React, {createContext,useContext,useState,useMemo,useEffect,useRef,} from "react";
-import {Target,AlertTriangle,Receipt,HandCoins,MoreHorizontal,} from "lucide-react";
-import {buildInitialTransactions,buildInitialGoals,buildInitialNotifications,budgetCategoryOptions,} from "../data";
+import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from "react";
+import { Target, AlertTriangle, Receipt, HandCoins, Tag } from "lucide-react";
+import { buildInitialTransactions, buildInitialGoals, buildInitialNotifications, budgetCategoryOptions } from "../data";
 import { toISODate, formatTime } from "../utils";
 import { fmtNShort } from "../theme";
 import { USE_MOCK_DATA, ApiError } from "../api/client";
-import {AuthAPI,ProfileAPI,BudgetAPI,TransactionsAPI,WalletsAPI,CategoriesAPI,GoalsAPI,NotificationsAPI,DashboardAPI,SecurityAPI,} from "../api/endpoints";
-import {startOfWeek,endOfWeek,weekTotal,daysAgo,relativeWhen,groupFor,} from "../utils/dateHelpers";
+import { AuthAPI, ProfileAPI, BudgetAPI, TransactionsAPI, WalletsAPI, CategoriesAPI, GoalsAPI, NotificationsAPI, SecurityAPI } from "../api/endpoints";
+// WalletsAPI/CategoriesAPI now also used for creation (handleCreateWallet /
+// handleCreateCategory below), not just the initial list fetch.
+// NOTE: IncomeAPI import removed — /income doesn't exist on the backend.
+// Income is now logged through TransactionsAPI.create() with type: "Income",
+// same as expenses, per transaction.validator.js.
 
 export const AppContext = createContext(null);
 
@@ -14,64 +18,40 @@ export function useApp() {
 }
 
 export function AppProvider({ children }) {
-  console.log("AppProvider rendered");
-
   const [screen, setScreen] = useState("splash");
-  const [screenData, setScreenData] = useState(null);
   const [history, setHistory] = useState([]);
   const [name, setName] = useState("");
   const [darkMode, setDarkMode] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
   const [toast, setToast] = useState(null);
-
   const showToast = (msg) => setToast(msg);
-
   useEffect(() => {
     if (!toast) return;
-
     const id = setTimeout(() => setToast(null), 2600);
-
     return () => clearTimeout(id);
   }, [toast]);
-
   const [apiBusy, setApiBusy] = useState(false);
-
   const reportApiError = (err, fallbackMsg) => {
-    const msg =
-      err instanceof ApiError
-        ? err.message
-        : fallbackMsg || "Something went wrong. Please try again.";
-
+    const msg = err instanceof ApiError ? err.message : fallbackMsg || "Something went wrong. Please try again.";
     showToast(msg);
   };
-
   const [profileEmail, setProfileEmail] = useState("");
+  // Phone has no home on this backend (the user model only has firstName,
+  // lastName, email) — so it's kept purely local, persisted to localStorage
+  // under the current user's email so it survives refreshes on this browser.
+  // It intentionally starts blank; PersonalInfo shows "Not provided" until
+  // the user has entered one (at signup or by editing their profile).
   const [profilePhone, setProfilePhoneState] = useState("");
-
-  const phoneStorageKey = (email) =>
-    `goalsave_phone:${(email || "").toLowerCase()}`;
-
+  const phoneStorageKey = (email) => `goalsave_phone:${(email || "").toLowerCase()}`;
   const setProfilePhone = (value) => {
     setProfilePhoneState(value);
-
     try {
-      if (profileEmail) {
-        localStorage.setItem(phoneStorageKey(profileEmail), value || "");
-      }
+      if (profileEmail) localStorage.setItem(phoneStorageKey(profileEmail), value || "");
     } catch {
-      // Ignore localStorage errors
+      /* ignore storage errors (e.g. private browsing) */
     }
   };
-
-  // Dashboard totals
-  const [totalBalance, setTotalBalance] = useState(0);
-
-  console.log("Current totalBalance state:", totalBalance);
-
-  const [totalIncome, setTotalIncome] = useState(0);
-  const [totalExpensesState, setTotalExpenses] = useState(0);
-
   const loadLocalPhone = (email) => {
     try {
       return localStorage.getItem(phoneStorageKey(email)) || "";
@@ -79,148 +59,120 @@ export function AppProvider({ children }) {
       return "";
     }
   };
-
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [transactions, setTransactions] = useState([]);
-  const [goals, setGoals] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [transactions, setTransactions] = useState(buildInitialTransactions);
+  const [goals, setGoals] = useState(buildInitialGoals);
+  const [notifications, setNotifications] = useState(buildInitialNotifications);
   const [income, setIncome] = useState(0);
-  const [currency, setCurrency] = useState("Nigerian Naira (₦)");
-  const [budgetCats, setBudgetCats] = useState([]);
-  const [allocations, setAllocations] = useState({});
-
-  // Budgets are the source of truth for all budget-derived totals.
-  // Refreshed through a full GET /budgets request after budget changes.
+  const [currency, setCurrency] = useState("Nigerian Naira (\u20A6)");
+  const [budgetCats, setBudgetCats] = useState(budgetCategoryOptions);
+  const [allocations, setAllocations] = useState({ Food: 60000, Transport: 30000, Housing: 80000, Utilities: 20000, Entertainment: 15000, Others: 10000 });
+  // Raw array of Budget documents as returned by GET /budgets — confirmed
+  // against budget.service.js: getBudgets() always populates `category`
+  // ({ _id, name, color, icon }) and includes backend-computed
+  // `spent`/`remaining`/`percentageUsed`/`status` per budget (from
+  // calculateBudgetStats, which aggregates real Transaction documents
+  // matching that budget's exact category + date range + type "Expense").
+  // This is the single source of truth — budgetsByCategory, totalAllocated,
+  // and totalBudgetSpent are all derived from it below rather than being
+  // separately tracked state that can drift out of sync. Refreshed via a
+  // full GET /budgets refetch after every create/update, since POST and
+  // PATCH responses are confirmed to return incomplete shapes (POST:
+  // category unpopulated, no stats; PATCH: stats included but category
+  // still unpopulated) — neither is safe to merge in directly.
   const [budgets, setBudgets] = useState([]);
-
+  // Keyed by budgetCats `key` (e.g. "Food") -> that budget's backend _id.
+  // Category names are set to the budgetCats key itself at creation time
+  // (see handleFinishBudget), so this matches directly on b.category.name
+  // with no fallback/guessing needed.
   const budgetsByCategory = useMemo(() => {
     const map = {};
-
-    budgets.forEach((budget) => {
-      const key = budget.category?.name;
-
-      if (key) {
-        map[key] = budget._id;
-      }
+    budgets.forEach((b) => {
+      const key = b.category?.name;
+      if (key) map[key] = b._id;
     });
-
     return map;
   }, [budgets]);
-
-  const totalAllocated = useMemo(
-    () =>
-      budgets.reduce(
-        (sum, budget) => sum + (budget.amount || 0),
-        0
-      ),
-    [budgets]
-  );
-
-  const totalRemaining = useMemo(
-    () =>
-      budgets.reduce(
-        (sum, budget) => sum + (budget.remaining || 0),
-        0
-      ),
-    [budgets]
-  );
-
- const totalSpent = useMemo(
-  () =>
-    budgets.reduce(
-      (sum, budget) => sum + (budget.spent || 0),
-      0
-    ),
-  [budgets]
-);
-
-// Total amount actually spent against all budgets.
-// Uses the backend-provided `spent` value from each budget.
-const totalBudgetSpent = totalSpent;
-
-// This is intentionally based on the backend-provided remaining values.
-const budgetRemaining = totalRemaining;
-
-  
+  const totalAllocated = useMemo(() => budgets.reduce((s, b) => s + (b.amount || 0), 0), [budgets]);
+  // Backend-computed spend per budget (aggregated from real Transaction
+  // documents matching that budget's category + date range + type
+  // "Expense") — summed here rather than independently recomputing from
+  // the whole `transactions` list, which would include spending outside
+  // each budget's date range or in non-budgeted categories.
+  const totalBudgetSpent = useMemo(() => budgets.reduce((s, b) => s + (b.spent || 0), 0), [budgets]);
+  const budgetRemaining = totalAllocated - totalBudgetSpent;
   const [notifFilter, setNotifFilter] = useState("All");
-
-  const [
-    notificationsBackendAvailable,
-    setNotificationsBackendAvailable,
-  ] = useState(false);
-
+  // Tracks whether GET /notifications actually returned data (i.e. the
+  // backend module has been built) vs. 404ing (confirmed unbuilt as of
+  // this writing). Starts false; flips true automatically the first time a
+  // real response comes back, so notifications switch from generated
+  // (real-data-derived, see NOTIFICATIONS section) to true backend data
+  // with no further code changes once that module ships.
+  const [notificationsBackendAvailable, setNotificationsBackendAvailable] = useState(false);
   const [txFilter, setTxFilter] = useState("All");
 
+  // Wallets/categories fetched from the backend — these hold the real
+  // Mongo _id values that transaction.validator.js requires for `wallet`
+  // and `category`. Populated from the API once USE_MOCK_DATA is false.
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  console.log("APP PROVIDER INSTANCE:", {
-    categories,
-  });
-
   /* ------------------------------- ADD WALLET ------------------------------- */
-
   const [newWalletName, setNewWalletName] = useState("");
   const [walletFormError, setWalletFormError] = useState("");
 
   const handleCreateWallet = async () => {
     const trimmed = newWalletName.trim();
-
     if (trimmed.length < 2) {
       setWalletFormError("Wallet name must be at least 2 characters.");
       return;
     }
-
     setWalletFormError("");
+
+    if (USE_MOCK_DATA) {
+      setWallets((w) => [...w, { _id: `local-${Date.now()}`, name: trimmed }]);
+      setNewWalletName("");
+      goBack();
+      return;
+    }
+
     setApiBusy(true);
-
     try {
-      if (USE_MOCK_DATA) {
-        setWallets((w) => [
-          ...w,
-          {
-            _id: `local-${Date.now()}`,
-            name: trimmed,
-          },
-        ]);
-
-        setNewWalletName("");
-        goBack();
-        return;
-      }
-
-      // Create wallet on backend
-      await WalletsAPI.create({
-        name: trimmed,
-      });
-
-      // Get the actual wallets from backend again
-      const updatedWallets = await WalletsAPI.list();
-
-      console.log("UPDATED WALLETS:", updatedWallets);
-
-      setWallets(updatedWallets);
-
+      const created = await WalletsAPI.create({ name: trimmed });
+      setWallets((w) => [...w, created]);
       setNewWalletName("");
       goBack();
     } catch (err) {
-      console.error("Create Wallet Error:", err);
-
-      setWalletFormError(
-        err instanceof ApiError
-          ? err.message
-          : "Couldn't create this wallet. Please try again."
-      );
+      setWalletFormError(err instanceof ApiError ? err.message : "Couldn't create this wallet. Please try again.");
     } finally {
       setApiBusy(false);
     }
   };
 
-
   /* ------------------------------ ADD CATEGORY ------------------------------ */
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryType, setNewCategoryType] = useState("Expense");
   const [categoryFormError, setCategoryFormError] = useState("");
+
+  // Keeps the Budget Wizard's own category list (budgetCats) in sync with
+  // categories created via AddCategory — so a category added mid-signup
+  // (or mid-wizard) shows up already checked in BudgetWizard Step 2
+  // without requiring a refetch. Scoped to type: "Expense" only, since
+  // budgetCats/allocations/the wizard as a whole are expense-budgeting
+  // concepts — an "Income" category created here has nothing to sync into.
+  // Matches existing entries case-insensitively by key so re-adding a
+  // category that already exists in the default list (e.g. "Food") just
+  // re-checks it instead of creating a visual duplicate row.
+  const syncBudgetCatFromCreated = (categoryName, type) => {
+    if (type !== "Expense") return;
+    setBudgetCats((cs) => {
+      const existing = cs.find((c) => c.key.toLowerCase() === categoryName.toLowerCase());
+      if (existing) {
+        return cs.map((c) => (c === existing ? { ...c, checked: true } : c));
+      }
+      return [...cs, { key: categoryName, label: categoryName, icon: Tag, checked: true }];
+    });
+  };
 
   const handleCreateCategory = async () => {
     const trimmed = newCategoryName.trim();
@@ -232,6 +184,7 @@ const budgetRemaining = totalRemaining;
 
     if (USE_MOCK_DATA) {
       setCategories((c) => [...c, { _id: `local-${Date.now()}`, name: trimmed, type: newCategoryType }]);
+      syncBudgetCatFromCreated(trimmed, newCategoryType);
       setNewCategoryName("");
       goBack();
       return;
@@ -241,6 +194,7 @@ const budgetRemaining = totalRemaining;
     try {
       const created = await CategoriesAPI.create({ name: trimmed, type: newCategoryType });
       setCategories((c) => [...c, created]);
+      syncBudgetCatFromCreated(created.name || trimmed, created.type || newCategoryType);
       setNewCategoryName("");
       goBack();
     } catch (err) {
@@ -256,7 +210,11 @@ const budgetRemaining = totalRemaining;
     return `${d.getDate()} ${months[d.getMonth()]}`;
   };
 
-  
+  // Confirmed against a real GET /transactions response: wallet and
+  // category always come back as populated objects ({ _id, name, ... }),
+  // never bare ID strings. This maps that real shape into the
+  // { cat, name, place, date, time, group } shape the rest of the UI
+  // (search, filters, grouping) expects.
   const normalizeTransaction = (t) => {
     if (!t || typeof t !== "object") return t;
     const categoryName = t.category?.name || "Uncategorized";
@@ -281,36 +239,15 @@ const budgetRemaining = totalRemaining;
       place: walletName || categoryName,
       amount: Number(t.amount) || 0,
       date: iso,
-      time: new Date(t.createdAt).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}),
+      time: new Date(t.transactionDate || t.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       group: groupLabel,
     };
   };
 
-  const mergeTransactionRelations = (transaction, categoryId, walletId) => {
-    if (!transaction) return null;
-
-  const pickedCategory = categories.find(
-    (c) => (c._id || c.id) === categoryId
-  );
-
-  const pickedWallet = wallets.find(
-    (w) => (w._id || w.id) === walletId
-  );
-
-  return {
-    ...transaction,
-    category:
-      transaction.category?.name
-        ? transaction.category
-        : pickedCategory || transaction.category,
-    wallet:
-      transaction.wallet?.name
-        ? transaction.wallet
-        : pickedWallet || transaction.wallet,
-  };
-};
-
-  
+  // Maps a raw /savings document into the { id, name, target, saved, due }
+  // shape Goals.jsx and the emergency-fund lookup expect. Field names
+  // confirmed against savings.service.js / the SavingsGoal model: _id,
+  // title, targetAmount, currentAmount, targetDate.
   const normalizeGoal = (g) => {
     if (!g || typeof g !== "object") return g;
     return {
@@ -323,7 +260,14 @@ const budgetRemaining = totalRemaining;
     };
   };
 
-  
+  // GET /transactions defaults to limit: 10 (see queryFeatures.js), sorted
+  // -createdAt. Calling TransactionsAPI.list() with no params — what the
+  // initial load did before — silently caps every user at their 10 most
+  // recently created transactions, regardless of how many they actually
+  // have. This pages through with page/limit (both already supported by
+  // getQueryFeatures on the backend, confirmed via transaction.service.js)
+  // until a page comes back shorter than the page size, so it scales
+  // correctly no matter how many transactions the user has.
   const fetchAllTransactions = async () => {
     const limit = 100;
     let page = 1;
@@ -342,102 +286,32 @@ const budgetRemaining = totalRemaining;
     if (USE_MOCK_DATA) return;
     (async () => {
       try {
-        console.log("SECURITY LOAD TEST: starting Promise.all");
-        const [
-  me,
-  dashboard,
-  fetchedBudgets,
-  tx,
-  gl,
-  nf,
-  sec,
-  wl,
-  cats,
-] = await Promise.all([
-  AuthAPI.me().catch(() => null),
-  DashboardAPI.get().catch(() => null),
-  BudgetAPI.list().catch(() => null),
-  fetchAllTransactions().catch(() => null),
-  GoalsAPI.list().catch(() => null),
-  NotificationsAPI.list().catch(() => null),
-  SecurityAPI.get().catch((err) => {
-    console.error(
-      "SECURITY API ERROR:",
-      err
-    );
-
-    return null;
-  }),
-  WalletsAPI.list().catch(() => null),
-  CategoriesAPI.list().catch(() => null),
-]);
-console.log("SECURITY LOAD TEST: Promise.all finished");
-console.log("SECURITY LOAD TEST: sec =", sec);
-console.log(
-  "SECURITY LOAD TEST: sec JSON =",
-  JSON.stringify(sec, null, 2)
-);
-
-        console.log("========== ALL DATA LOADED ==========");
-        console.log("cats from Promise.all:", cats);
-        console.log("cats is array:", Array.isArray(cats));
-
-        console.log("WALLETS FROM PROMISE ALL:", wl);
-        console.log("WALLETS FROM PROMISE ALL IS ARRAY:", Array.isArray(wl));
-
-        if (Array.isArray(cats)) {
-          console.log("SETTING CATEGORIES:", cats);
-          setCategories(cats);
-
-          const expenseCategories = cats.filter(
-            (c) => c.type === "Expense" && c.isActive !== false
-          );
-
-          const realBudgetCats = expenseCategories.map((c) => {
-            const existingOption = budgetCategoryOptions.find(
-              (option) => option.key === c.name
-            );
-
-            return {
-              key: c.name,
-              label: c.name,
-              icon: existingOption?.icon || MoreHorizontal,
-              checked: false,
-            };
-          });
-
-  console.log("REAL BUDGET CATEGORIES:", realBudgetCats);
-
-  setBudgetCats(realBudgetCats);
-}
-
+        const [me, fetchedBudgets, tx, gl, nf, sec, wl, cats] = await Promise.all([
+          AuthAPI.me().catch(() => null),
+          BudgetAPI.get().catch(() => null),
+          fetchAllTransactions().catch(() => null),
+          GoalsAPI.list().catch(() => null),
+          NotificationsAPI.list().catch(() => null),
+          SecurityAPI.get().catch(() => null),
+          WalletsAPI.list().catch(() => null),
+          CategoriesAPI.list().catch(() => null),
+        ]);
         if (me?.user) {
           const email = me.user.email || "";
           setName(me.user.firstName || me.user.name || me.user.fullName || "");
           setProfileEmail(email);
           setProfilePhoneState(loadLocalPhone(email));
         }
-
-        if (dashboard) {
-          console.log("========== DASHBOARD TEST ==========");
-          console.log("Dashboard:", dashboard);
-          console.log("Dashboard totalBalance:", dashboard?.totalBalance);
-          console.log("Dashboard totalIncome:", dashboard?.totalIncome);
-
-          setTotalBalance(dashboard.totalBalance || 0);
-          setTotalIncome(dashboard.totalIncome || 0);
-          
-        }        
+        // Confirmed against budget.service.js: getBudgets() always
+        // populates `category` with `{ _id, name, color, icon }` — no
+        // fallback needed. `budgets` (and the derived budgetsByCategory/
+        // totalAllocated/totalBudgetSpent above) become the source of
+        // truth; allocations and budgetCats' checked state are synced from
+        // it below purely for the wizard's own editable UI. There's no
+        // `income`/`currency` field on this backend at all, so those stay
+        // purely local/unpersisted for now.
         if (Array.isArray(fetchedBudgets)) {
           setBudgets(fetchedBudgets);
-
-          console.log("SETTING BUDGETS:", fetchedBudgets);
-          console.log("BUDGET COUNT:", fetchedBudgets.length);
-
-          console.log(
-            "REAL BUDGET DATA:",
-            JSON.stringify(fetchedBudgets, null, 2)
-          );
           if (fetchedBudgets.length > 0) {
             const allocMap = {};
             const savedKeys = new Set();
@@ -451,82 +325,34 @@ console.log(
             setBudgetCats((cs) => cs.map((c) => (savedKeys.has(c.key) ? { ...c, checked: true } : c)));
           }
         }
-        if (Array.isArray(tx)) {
-          const normalized = tx.map(normalizeTransaction);
-
-          setTransactions(normalized);
-
-          const income = normalized
-              .filter(t => t.type === "Income")
-              .reduce((sum, t) => sum + Number(t.amount), 0);
-
-          const expense = normalized
-              .filter(t => t.type === "Expense")
-              .reduce((sum, t) => sum + Number(t.amount), 0);
-
-          setTotalIncome(income);
-          
-      }
+        if (Array.isArray(tx)) setTransactions(tx.map(normalizeTransaction));
         if (Array.isArray(gl)) setGoals(gl.map(normalizeGoal));
         if (Array.isArray(nf)) {
           setNotifications(nf);
           setNotificationsBackendAvailable(true);
         }
         if (sec) {
-          if (sec.biometricEnabled != null) {
-            setBiometricEnabled(sec.biometricEnabled);
-          }
-
-          if (sec.twoFactorEnabled != null) {
-            setTwoFactorEnabled(sec.twoFactorEnabled);
-          }
+          if (sec.biometricEnabled != null) setBiometricEnabled(sec.biometricEnabled);
+          if (sec.twoFactorEnabled != null) setTwoFactorEnabled(sec.twoFactorEnabled);
         }
-        console.log("ABOUT TO PROCESS WALLETS:", wl)
-        if (Array.isArray(wl)) {
-          console.log("========== SETTING WALLETS ==========");
-          console.log("wl:", wl);
-          console.log("wl length:", wl.length);
-
-          setWallets(wl);
-
-          console.log("WALLETS BEING SET:", wl);
-        }
-        if (Array.isArray(cats)) {
-          console.log("========== CATEGORIES TEST ==========");
-          console.log("cats:", cats);
-          console.log("cats length:", cats.length);
-          console.log("first category:", cats[0]);
-
-          console.log(">>> CALLING setCategories NOW <<<");
-
-          setCategories(cats);
-
-          console.log(">>> setCategories WAS CALLED <<<");
-        }
+        if (Array.isArray(wl)) setWallets(wl);
+        if (Array.isArray(cats)) setCategories(cats);
       } catch (err) {
-        console.error("========== APP DATA LOAD ERROR ==========");
-        console.error(err);
         reportApiError(err, "Couldn't load your data from the server.");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
- const navigate = (next, data = null) => {
-  setHistory((h) => [...h, screen]);
-  setScreenData(data);
-  setScreen(next);
-};
+  const navigate = (next) => {
+    setHistory((h) => [...h, screen]);
+    setScreen(next);
+  };
   const goToTab = (tab) => {
-  setHistory([]);
-  setScreenData(null);
-
-  if (tab === "budgetHub") {
-    setBudgetStep(1);
-  }
-
-  setScreen(tab);
-};
+    setHistory([]);
+    if (tab === "budgetHub") setBudgetStep(1);
+    setScreen(tab);
+  };
   const goBack = () => {
     setHistory((h) => {
       if (h.length === 0) return h;
@@ -537,14 +363,19 @@ console.log(
     });
   };
 
-   
-  
+  const [totalIncome, setTotalIncome] = useState(245000);
+
+  // Income is now logged into the same `transactions` array as Expense (see
+  // handleSaveIncome), so this needs the same type filter spendingBreakdown
+  // already uses below — otherwise every income entry inflates "spent"
+  // figures instead of being excluded. "No type" is still treated as an
+  // expense, to match mock-mode data which never sets `type`.
   const totalExpenses = useMemo(
     () => transactions.filter((t) => !t.type || t.type === "Expense").reduce((s, t) => s + t.amount, 0),
     [transactions]
   );
- 
- 
+  // totalAllocated / totalBudgetSpent / budgetRemaining are defined earlier,
+  // derived directly from the `budgets` array (GET /budgets) — see above.
 
   /* ------------------------------- LOGIN ------------------------------- */
   const [phone, setPhone] = useState("");
@@ -641,14 +472,14 @@ console.log(
         setName(data.user.firstName || name.trim());
       }
       setProfileEmail(email);
-     
-     
+      // Phone isn't stored by the backend — save whatever the user typed at
+      // signup as this browser's local record for their account.
       const phoneVal = signupPhone.trim();
       setProfilePhoneState(phoneVal);
       try {
         localStorage.setItem(phoneStorageKey(email), phoneVal);
       } catch {
-        
+        /* ignore storage errors (e.g. private browsing) */
       }
       navigate("income");
     } catch (err) {
@@ -696,13 +527,20 @@ console.log(
 
   const toggleCat = (key) => setBudgetCats((cs) => cs.map((c) => (c.key === key ? { ...c, checked: !c.checked } : c)));
 
- 
+  // Live, in-progress sum of the wizard's own slider values for currently
+  // checked categories — NOT the same as totalAllocated (which only
+  // reflects categories already saved as real Budget documents on the
+  // backend). Needed so Step 3 ("Total Allocation"/"Remaining") and Step 4
+  // ("Total Budget") update live as the user drags sliders, before
+  // handleFinishBudget has saved anything to the backend.
   const wizardTotalAllocated = useMemo(
     () => budgetCats.filter((c) => c.checked).reduce((s, c) => s + (allocations[c.key] || 0), 0),
     [budgetCats, allocations]
   );
 
- 
+  // Defaults the required startDate/endDate to the current calendar month,
+  // since the wizard has no date-range UI of its own. Revisit if the
+  // product wants the user to pick a custom range instead.
   const getCurrentMonthRange = () => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -710,7 +548,12 @@ console.log(
     return { startDate: toISODate(start), endDate: toISODate(end) };
   };
 
- 
+  // The backend requires `category` to be a real category ObjectId, not a
+  // label. Categories aren't confirmed to be auto-seeded per user (the
+  // Category schema's `isDefault` flag defaults to false with no seed
+  // logic visible), so this looks for an existing category matching the
+  // name/type in what's already been fetched, and creates one on the fly
+  // if it isn't there yet — safe whether or not defaults exist.
   const resolveCategoryId = async (categoryName, type = "Expense") => {
     const existing = categories.find(
       (c) => (c.name || "").toLowerCase() === categoryName.toLowerCase() && c.type === type
@@ -721,6 +564,12 @@ console.log(
       setCategories((cs) => [...cs, created]);
       return created._id || created.id;
     } catch (err) {
+      // Category schema enforces a unique (user, name, type, isActive)
+      // index (confirmed in category.model.js) — if this exact category
+      // was created elsewhere (another tab/session) between our last
+      // GET /categories and this create call, the create fails on that
+      // constraint. Refetch and retry the lookup instead of treating this
+      // as a hard failure.
       const fresh = await CategoriesAPI.list().catch(() => null);
       if (Array.isArray(fresh)) {
         setCategories(fresh);
@@ -733,30 +582,54 @@ console.log(
     }
   };
 
- 
+  // Backend Budget documents are one-per-category (title, category, amount,
+  // startDate, endDate) — there's no single object to represent "the whole
+  // wizard" the way `income`/`currency`/`allocations` implied. So this
+  // saves one budget per checked, allocated category, updating it via
+  // PATCH if budgetsByCategory already has an _id for that category, or
+  // creating it via POST otherwise. `income`/`currency` have no backend
+  // field at all and stay local-only for now.
+  //
+  // Confirmed against budget.service.js: POST /budgets returns the raw
+  // created document with `category` UNPOPULATED and no spent/remaining
+  // stats; PATCH /budgets/:id includes stats but `category` is ALSO
+  // unpopulated (the update query has no .populate()). Neither response is
+  // safe to merge into `budgets` directly — only GET /budgets is confirmed
+  // fully populated with stats. So after the saves complete, this refetches
+  // GET /budgets and replaces `budgets` wholesale with that canonical data,
+  // rather than reconstructing partial objects from create/update responses.
+  //
+  // createBudget on the backend throws 409 "A budget already exists for
+  // this period" whenever there's ANY overlapping Budget for the same
+  // (user, category) pair — overlap is checked on the date range, not an
+  // exact match, and is scoped per category (confirmed in
+  // budget.service.js's createBudget). Local `budgetsByCategory` is built
+  // from client-side `budgets` state, which can go stale relative to the
+  // backend (e.g. the initial GET /budgets fetch failed and was swallowed
+  // by .catch(() => null), or another session already created it) — in
+  // that case a save that *should* be an update looks like a fresh
+  // category here and gets POSTed, tripping that overlap check. On that
+  // specific 409, refetch and retry as a PATCH against the real record
+  // instead of surfacing the failure — updateBudget has no such overlap
+  // check (confirmed in budget.service.js), so this is safe.
   const handleFinishBudget = async () => {
     if (!USE_MOCK_DATA) {
       const { startDate, endDate } = getCurrentMonthRange();
-
-      const selected = budgetCats.filter(
-        (c) => c.checked && allocations[c.key] > 0
-      );
-
+      const selected = budgetCats.filter((c) => c.checked && allocations[c.key] > 0);
       if (selected.length === 0) {
-        showToast(
-          "No categories with an allocation to save — add an amount first."
-        );
+        showToast("No categories with an allocation to save — add an amount first.");
+        if (history.length === 0) navigate("securityPrompt");
+        else goToTab("dashboard");
         return;
       }
-
       try {
         await Promise.all(
           selected.map(async (c) => {
-            const categoryId = await resolveCategoryId(
-              c.key,
-              "Expense"
-            );
-
+            // Use the internal key (not c.label) for both the category
+            // name and the title, since GET /budgets populates
+            // category.name and this must match budgetCats' key exactly
+            // for budgetsByCategory to resolve correctly on next load.
+            const categoryId = await resolveCategoryId(c.key, "Expense");
             const payload = {
               title: `${c.key} Budget`,
               category: categoryId,
@@ -764,9 +637,7 @@ console.log(
               startDate,
               endDate,
             };
-
             const existingId = budgetsByCategory[c.key];
-
             try {
               if (existingId) {
                 await BudgetAPI.update(existingId, payload);
@@ -774,79 +645,67 @@ console.log(
                 await BudgetAPI.create(payload);
               }
             } catch (err) {
+              // Only recover from the specific "stale local state" case —
+              // an overlap conflict on a category we thought was new.
+              // Anything else (validation error, network error, etc.)
+              // should propagate to the outer catch as before.
+              // Confirmed against api/client.js: ApiError carries the real
+              // HTTP status in `.status` (set from response.status), and
+              // this specific case is always a 409 from the backend's
+              // AppError("A budget already exists for this period", 409).
+              // Checking both status and message avoids misfiring on some
+              // other unrelated 409 that happens to share wording.
               const isPeriodConflict =
                 err instanceof ApiError &&
                 err.status === 409 &&
-                /already exists for this period/i.test(
-                  err.message || ""
-                );
+                /already exists for this period/i.test(err.message || "");
+              if (!isPeriodConflict) throw err;
 
-              if (!isPeriodConflict) {
-                throw err;
-              }
-
-              const fresh = await BudgetAPI.list().catch(
-                () => null
-              );
-
+              const fresh = await BudgetAPI.get().catch(() => null);
               const match = Array.isArray(fresh)
-                ? fresh.find(
-                    (b) => b.category?.name === c.key
-                  )
+                ? fresh.find((b) => b.category?.name === c.key)
                 : null;
+              if (!match) throw err; // genuinely unresolvable — let it surface
 
-              if (!match) {
-                throw err;
-              }
-
-              await BudgetAPI.update(
-                match._id,
-                payload
-              );
+              await BudgetAPI.update(match._id, payload);
             }
           })
         );
-
-        const fresh = await BudgetAPI.list();
-
-        if (Array.isArray(fresh)) {
-          setBudgets(fresh);
-        }
-
+        const fresh = await BudgetAPI.get();
+        if (Array.isArray(fresh)) setBudgets(fresh);
         showToast("Your budget has been saved.");
-
-        // IMPORTANT:
-        // Stay inside the wizard and show the Complete screen.
-        setBudgetStep(4);
-
       } catch (err) {
-        console.error(
-          "Save budget error:",
-          err
-        );
-
-        reportApiError(
-          err,
-          "Couldn't save your budget. Please try again."
-        );
-
-        // Do NOT move to Step 4 if saving failed.
-        return;
+        reportApiError(err, "Couldn't save your budget. It's kept locally for now.");
       }
-    } else {
-      // Mock-data mode still needs to reach the Complete screen.
-      setBudgetStep(4);
     }
+    if (history.length === 0) navigate("securityPrompt");
+    else goToTab("dashboard");
   };
 
   /* -------------------------------- DASHBOARD ------------------------------ */
-  
+  // Rotating fallback palette for any expense category that doesn't have a
+  // fixed color in Dashboard.jsx's own T.chart map (custom categories added
+  // via handleCreateCategory have no fixed slot). Dashboard.jsx already
+  // prefers `T.chart[s.cat]` over this when a known category matches, so
+  // this is just the fallback tier.
   const CATEGORY_FALLBACK_COLORS = ["#16A34A", "#F5A524", "#20B0C4", "#E23FA0", "#9B59B6", "#101B3D"];
 
+  // Was previously derived from budget allocations (which categories were
+  // budgeted and how much), but "Spending Overview" is meant to show actual
+  // spending, not budget targets — the Budget Remaining card already covers
+  // budgeted-vs-spent. This groups real transactions by category, sums the
+  // amount spent in each, and returns the top 5 by amount as a percentage
+  // of total spend across ALL categories (so the top 5 percentages may not
+  // sum to 100 if there are more than 5 categories in play — the remainder
+  // is implicitly "everything else").
   const spendingBreakdown = useMemo(() => {
     const totals = {};
     transactions.forEach((t) => {
-      
+      // Only count expenses. Transactions fetched from the backend carry a
+      // `type` field ("Income"/"Expense"); locally-seeded mock transactions
+      // and the mock-mode Add Expense flow don't set `type` at all (mock
+      // Add Income never pushes into `transactions`), so treat "no type"
+      // as an expense too rather than dropping it.
       if (t.type && t.type !== "Expense") return;
       const key = t.cat || "Uncategorized";
       totals[key] = (totals[key] || 0) + (Number(t.amount) || 0);
@@ -863,7 +722,8 @@ console.log(
     }));
   }, [transactions]);
   const donutGradient = (() => {
-    
+    // Empty state (no expenses logged yet) — render a flat grey ring
+    // instead of an empty conic-gradient(), which is invalid CSS.
     if (spendingBreakdown.length === 0) return "conic-gradient(#D9D9D9 0% 100%)";
     let acc = 0;
     const parts = spendingBreakdown.map((s) => {
@@ -873,19 +733,29 @@ console.log(
     return `conic-gradient(${parts.join(",")})`;
   })();
 
-  
+  // Was `goals.find(...)` with no fallback — returned `undefined` whenever no
+  // goal named "Emergency Fund" existed yet (e.g. a fresh account with zero
+  // goals), which crashed Goals.jsx (`emergency.saved` on undefined).
+  // Falling back to a zeroed placeholder keeps the screen renderable either
+  // way. Confirmed against the SavingsGoal model: there's no `featured`
+  // boolean on the backend at all, so `others` below excludes this goal by
+  // id instead of relying on a field that doesn't exist.
   const emergency = goals.find((g) => g.name === "Emergency Fund") || {
     id: null,
     name: "Emergency Fund",
     saved: 0,
-    target: 1, // prevent divide-by-zero
+    target: 1, // avoid divide-by-zero in (emergency.saved / emergency.target)
     due: "-",
   };
-  
+  // unreadCount is defined further down, after generatedNotifications —
+  // see the NOTIFICATIONS section — since it now depends on real
+  // transaction/budget/goal data that isn't all available this early.
 
   /* ------------------------------- ADD EXPENSE ------------------------------ */
   const [expAmount, setExpAmount] = useState("");
-  
+  // expAccount/expCat hold real Mongo ObjectIds (selected wallet/category
+  // _id) once wired to the live backend — transaction.validator.js requires
+  // `wallet` and `category` to be real ObjectIds.
   const [expAccount, setExpAccount] = useState("");
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const [expCat, setExpCat] = useState("");
@@ -909,346 +779,74 @@ console.log(
   };
   const addExpenseCats = ["All", "Food", "Transportation", "Bills", "Entertainment"];
 
-  const handleUpdateTransaction = async (transactionId, payload) => {
-  console.log("================================");
-  console.log("UPDATING TRANSACTION");
-  console.log("Transaction ID:", transactionId);
-  console.log("Update Payload:", payload);
-  console.log("================================");
+  const handleSaveExpense = async () => {
+    if (!expAmount) return;
+    const todayISOStr = toISODate(new Date());
+    const yestDateObj = new Date();
+    yestDateObj.setDate(yestDateObj.getDate() - 1);
+    const yestISOStr = toISODate(yestDateObj);
+    const groupLabel =
+      expDate === todayISOStr ? `Today, ${formatShortGroupDate(expDate)}` :
+      expDate === yestISOStr ? `Yesterday, ${formatShortGroupDate(expDate)}` :
+      formatShortGroupDate(expDate);
+    const categoryLabel = expCat === "All" ? "Others" : expCat;
+    const localTx = { id: Date.now(), cat: categoryLabel, name: expNote || categoryLabel, place: categoryLabel, amount: Number(expAmount), date: expDate, time: formatTime(new Date()), group: groupLabel };
 
-  if (!transactionId) {
-    reportApiError(null, "Transaction ID is missing.");
-    return false;
-  }
-
-  setApiBusy(true);
-
-  try {
-    const updated = await TransactionsAPI.update(
-      transactionId,
-      payload
-    );
-
-    console.log("UPDATED TRANSACTION FROM API:", updated);
-
-    if (updated) {
-      setTransactions((current) =>
-        current.map((t) =>
-          t.id === transactionId ||
-          t._id === transactionId
-            ? normalizeTransaction(updated)
-            : t
-        )
-      );
-    }
-
-    // Refresh wallets because editing a transaction
-    // can change the wallet balance.
-    const updatedWallets = await WalletsAPI.list();
-
-    console.log(
-      "UPDATED WALLETS AFTER TRANSACTION UPDATE:",
-      updatedWallets
-    );
-
-    setWallets(
-      Array.isArray(updatedWallets)
-        ? updatedWallets.map(normalizeWallet)
-        : []
-    );
-
-    // Refresh savings goals because a savings contribution
-    // may have been changed.
-    const updatedGoals = await GoalsAPI.list();
-
-    console.log(
-      "UPDATED GOALS AFTER TRANSACTION UPDATE:",
-      updatedGoals
-    );
-
-    setGoals(
-      Array.isArray(updatedGoals)
-        ? updatedGoals.map(normalizeGoal)
-        : []
-    );
-
-    // Refresh dashboard totals.
-    const updatedDashboard =
-      await DashboardAPI.get();
-
-    console.log(
-      "UPDATED DASHBOARD AFTER TRANSACTION UPDATE:",
-      updatedDashboard
-    );
-
-    if (updatedDashboard) {
-      setDashboard(updatedDashboard);
-
-      if (
-        updatedDashboard.totalBalance !== undefined
-      ) {
-        setTotalBalance(
-          updatedDashboard.totalBalance
-        );
-      }
-    }
-
-    console.log(
-      "TRANSACTION UPDATE COMPLETED SUCCESSFULLY"
-    );
-
-    return true;
-
-  } catch (err) {
-    console.error(
-      "UPDATE TRANSACTION ERROR:",
-      err
-    );
-
-    reportApiError(
-      err,
-      "Couldn't update the transaction."
-    );
-
-    return false;
-
-  } finally {
-    setApiBusy(false);
-  }
-};
-
-
-const handleSaveExpense = async () => {
-  console.log("1. handleSaveExpense started");
-
-  if (!expAmount) {
-    console.log("No amount entered");
-    return;
-  }
-
-  const isSavingsContribution =
-    screenData?.type === "savingsContribution";
-
-  // Savings contributions still need an Expense category
-  // because the Transaction model requires one.
-  let categoryId = expCat;
-
-  if (isSavingsContribution) {
-  let savingsCategory = categories.find(
-    (c) =>
-      c.type === "Expense" &&
-      c.isActive !== false &&
-      (
-        c.name === "Savings" ||
-        c.name === "Savings Contribution"
-      )
-  );
-
-  if (!savingsCategory) {
-    console.log(
-      "Savings category not found. Creating it..."
-    );
-
-    try {
-      savingsCategory = await CategoriesAPI.create({
-        name: "Savings",
-        type: "Expense",
-        color: "#14AD4C",
-        icon: "piggy-bank",
-      });
-
-      console.log(
-        "Savings category created:",
-        savingsCategory
-      );
-
-      setCategories((cs) => [
-        ...cs,
-        savingsCategory,
-      ]);
-    } catch (categoryError) {
-      console.error(
-        "Failed to create Savings category:",
-        categoryError
-      );
-
-      reportApiError(
-        categoryError,
-        "Couldn't create the Savings category."
-      );
-
+    if (USE_MOCK_DATA) {
+      setTransactions((t) => [localTx, ...t]);
+      setExpAmount(""); setExpNote("");
+      goToTab("transactions");
       return;
     }
-  }
 
-  categoryId =
-    savingsCategory._id ||
-    savingsCategory.id;
+    // Real backend requires wallet/category as ObjectIds and a capitalized
+    // type. expAccount/expCat must hold the selected wallet/category _id —
+    // see the Add Expense form for how those are set.
+    if (!expAccount || !expCat) {
+      reportApiError(null, "Please choose a wallet and category before saving.");
+      return;
+    }
 
-  console.log(
-    "Using Savings category:",
-    savingsCategory
-  );
-}
-  if (!expAccount || !categoryId) {
-    console.log("Wallet or category missing");
-
-    reportApiError(
-      null,
-      "Please choose a wallet and category."
-    );
-
-    return;
-  }
-
-  const payload = {
-    wallet: expAccount,
-    category: categoryId,
-    type: "Expense",
-    amount: Number(expAmount),
-    description: isSavingsContribution
-      ? `Savings contribution: ${
-          screenData?.goal?.title ||
-          screenData?.goal?.name ||
-          "Savings Goal"
-        }`
-      : expNote || "",
-    transactionDate: expDate,
+    setApiBusy(true);
+    try {
+      const created = await TransactionsAPI.create({
+        wallet: expAccount,
+        category: expCat,
+        type: "Expense",
+        amount: Number(expAmount),
+        description: expNote || "",
+        transactionDate: expDate,
+      });
+      // POST /transactions may not return wallet/category populated the
+      // way GET /transactions does — fall back to the category/wallet the
+      // user actually picked (we already have their full objects in
+      // `categories`/`wallets`) so the new entry doesn't show
+      // "Uncategorized" just because the create response was unpopulated.
+      const pickedCategory = categories.find((c) => (c._id || c.id) === expCat);
+      const pickedWallet = wallets.find((w) => (w._id || w.id) === expAccount);
+      const merged = created
+        ? {
+            ...created,
+            category: (created.category && created.category.name) ? created.category : (pickedCategory || created.category),
+            wallet: (created.wallet && created.wallet.name) ? created.wallet : (pickedWallet || created.wallet),
+          }
+        : null;
+      setTransactions((t) => [merged ? normalizeTransaction(merged) : localTx, ...t]);
+      setExpAmount(""); setExpNote("");
+      goToTab("transactions");
+    } catch (err) {
+      reportApiError(err, "Couldn't save this expense. Please try again.");
+    } finally {
+      setApiBusy(false);
+    }
   };
 
-  console.log(
-    "Savings contribution:",
-    isSavingsContribution
-  );
-
-  console.log(
-    "Final Expense Payload:",
-    payload
-  );
-
-  if (
-    isSavingsContribution &&
-    screenData?.goal
-  ) {
-    const goalId =
-      screenData.goal.id ||
-      screenData.goal._id;
-
-    if (goalId) {
-      payload.savingsGoal = goalId;
-    }
-  }
-
-  console.log("Final Payload:", payload);
-
-  setApiBusy(true);
-
-  try {
-    console.log("Calling API...");
-
-    const created =
-      await TransactionsAPI.create(payload);
-
-    console.log("API returned:", created);
-
-    // Refresh budgets because this expense may have changed
-    // the backend-computed `spent`, `remaining`, and `percentageUsed`.
-    const updatedBudgets = await BudgetAPI.list();
-    console.log(
-      "UPDATED BUDGETS AFTER EXPENSE:",
-      JSON.stringify(updatedBudgets, null, 2)
-    );
-
-    if (Array.isArray(updatedBudgets)) {
-      setBudgets(updatedBudgets);
-    }
-
-    const merged = mergeTransactionRelations(
-      created,
-      categoryId,
-      expAccount
-    );
-
-    if (merged) {
-      setTransactions((t) => [
-        normalizeTransaction(merged),
-        ...t,
-      ]);
-    }
-
-    // Refresh budget statistics so Dashboard reflects the new expense.
-    if (!USE_MOCK_DATA) {
-      const updatedBudgets = await BudgetAPI.list();
-
-      if (Array.isArray(updatedBudgets)) {
-        setBudgets(updatedBudgets);
-      }
-    }
-
-    if (isSavingsContribution) {
-      // refresh goals only
-      const updatedGoals = await GoalsAPI.list();
-
-      setGoals(updatedGoals.map(normalizeGoal));
-    }
-
-    // refresh wallets for EVERY expense
-    const updatedWallets = await WalletsAPI.list();
-
-    if (Array.isArray(updatedWallets)) {
-      setWallets(updatedWallets);
-
-      const newTotalBalance = updatedWallets.reduce(
-        (sum, wallet) => sum + Number(wallet.balance || 0),
-        0
-      );
-
-      console.log("UPDATED WALLETS:", updatedWallets);
-      console.log("NEW TOTAL BALANCE:", newTotalBalance);
-
-      setTotalBalance(newTotalBalance);
-    }
-
-    // refresh dashboard for EVERY transaction
-    const updatedDashboard = await DashboardAPI.get();
-
-    if (updatedDashboard) {
-      console.log("UPDATED DASHBOARD:", updatedDashboard);
-
-      setTotalBalance(updatedDashboard.totalBalance || 0);
-      setTotalIncome(updatedDashboard.totalIncome || 0);
-    }
-
-    setExpAmount("");
-    setExpNote("");
-
-    goToTab(
-      isSavingsContribution
-        ? "goals"
-        : "transactions"
-    );
-
-  } catch (err) {
-    console.error(
-      "Save Expense Error:",
-      err
-    );
-
-    reportApiError(
-      err,
-      isSavingsContribution
-        ? "Couldn't save this contribution. Please try again."
-        : "Couldn't save expense."
-    );
-
-  } finally {
-    setApiBusy(false);
-  }
-};  
-
-/* -------------------------------- ADD INCOME ------------------------------- */
+  /* -------------------------------- ADD INCOME ------------------------------- */
   const [incAmount, setIncAmount] = useState("");
-  
+  // Same story as expAccount/expCat above — must hold real wallet/category
+  // _ids once the Add Income form is wired up. incSource stays a plain
+  // label (there's no backend field for it); it's folded into `description`
+  // below so it isn't silently dropped.
   const [incSource, setIncSource] = useState("Salary");
   const [incAccount, setIncAccount] = useState("");
   const [incCat, setIncCat] = useState("");
@@ -1257,15 +855,8 @@ const handleSaveExpense = async () => {
   const incomeSources = ["Salary", "Business", "Gift", "Investment", "Other"];
 
   const handleSaveIncome = async () => {
-    console.log("handleSaveIncome called");
     if (!incAmount) return;
     const amt = Number(incAmount);
-    console.log({
-      incAccount,
-      incCat,
-      incAmount,
-      incDate,
-    });
 
     if (USE_MOCK_DATA) {
       setTotalIncome((t) => t + amt);
@@ -1275,7 +866,8 @@ const handleSaveExpense = async () => {
       return;
     }
 
-    
+    // /income doesn't exist on this backend — income is logged as a
+    // transaction with type: "Income", same endpoint as expenses.
     if (!incAccount || !incCat) {
       reportApiError(null, "Please choose a wallet and category before saving.");
       return;
@@ -1291,15 +883,21 @@ const handleSaveExpense = async () => {
         description: incNote ? `${incSource}: ${incNote}` : incSource,
         transactionDate: incDate,
       });
-      
-      const merged = mergeTransactionRelations(created, incCat, incAccount);
-
-      if (merged) {
-        setTransactions((t) => [normalizeTransaction(merged), ...t]);
-      }
-      
+      // Same POST-doesn't-populate issue as handleSaveExpense — fall back
+      // to the category/wallet the user actually picked.
+      const pickedCategory = categories.find((c) => (c._id || c.id) === incCat);
+      const pickedWallet = wallets.find((w) => (w._id || w.id) === incAccount);
+      const merged = created
+        ? {
+            ...created,
+            category: (created.category && created.category.name) ? created.category : (pickedCategory || created.category),
+            wallet: (created.wallet && created.wallet.name) ? created.wallet : (pickedWallet || created.wallet),
+          }
+        : null;
+      if (merged) setTransactions((t) => [normalizeTransaction(merged), ...t]);
+      // Backend has no running-total field to read back (unlike the old
+      // /income spec's { totalIncome }), so we keep incrementing locally.
       setTotalIncome((t) => t + amt);
-      setTotalBalance((b) => b + amt);
       showToast(`${fmtNShort(amt)} added to your total income.`);
       setIncAmount(""); setIncNote("");
       goToTab("dashboard");
@@ -1316,30 +914,53 @@ const handleSaveExpense = async () => {
   const catFilteredTx = txFilter === "All" ? searchedTx : searchedTx.filter((t) => t.cat === txFilter || (txFilter === "Transportation" && t.cat === "Transport"));
   const filteredTx = txSortNewest ? catFilteredTx : [...catFilteredTx].sort((a, b) => b.amount - a.amount);
   const grouped = filteredTx.reduce((acc, t) => { (acc[t.group] = acc[t.group] || []).push(t); return acc; }, {});
-  const dailyBudget = useMemo(() => {
-    if (!totalAllocated || totalAllocated <= 0) return 0;
+  const dailyBudget = 15000;
+  const spentToday = transactions
+    .filter((t) => t.group.startsWith("Today") && (!t.type || t.type === "Expense"))
+    .reduce((s, t) => s + t.amount, 0);
 
-    const now = new Date();
-    const daysInMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0
-    ).getDate();
-
-    return totalAllocated / daysInMonth;
-  }, [totalAllocated]);
-    const spentToday = transactions
-      .filter((t) => t.group.startsWith("Today") && (!t.type || t.type === "Expense"))
+  /* --------------------------- WEEKLY (real figures) ------------------------- */
+  // Real "this week" figures for Transactions.jsx's weekly card. Weeks run
+  // Monday–Sunday. weeklyBudget prorates the real monthly budget total
+  // (totalAllocated, from actual Budget documents via BudgetAPI.get()) across
+  // the number of days in the current calendar month — there's no distinct
+  // "weekly budget" on the backend, Budget documents are monthly by design
+  // (see getCurrentMonthRange in handleFinishBudget), so this is a derived
+  // approximation, not a separately-tracked value.
+  const startOfWeek = (d) => {
+    const date = new Date(d);
+    const day = date.getDay(); // 0 = Sun
+    const diff = day === 0 ? -6 : 1 - day; // shift back to Monday
+    date.setDate(date.getDate() + diff);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+  const endOfWeek = (d) => {
+    const s = startOfWeek(d);
+    const e = new Date(s);
+    e.setDate(e.getDate() + 6);
+    e.setHours(23, 59, 59, 999);
+    return e;
+  };
+  const weekTotal = (transactionsList, weekStart, weekEnd) =>
+    transactionsList
+      .filter((t) => !t.type || t.type === "Expense")
+      .filter((t) => {
+        const d = new Date(t.date + "T00:00:00");
+        return d >= weekStart && d <= weekEnd;
+      })
       .reduce((s, t) => s + t.amount, 0);
 
-  /* --------------------------- WEEKLY  ------------------------- */
-  
+  const weeklyBudget = useMemo(() => {
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return Math.round((totalAllocated * 7) / daysInMonth);
+  }, [totalAllocated]);
+
   const spentThisWeek = useMemo(() => {
     const now = new Date();
     return weekTotal(transactions, startOfWeek(now), endOfWeek(now));
   }, [transactions]);
-
-  const weeklyBudget = dailyBudget * 7;
 
   // Real expense totals for the current week and the 3 before it (oldest
   // first), for Transactions.jsx's bar chart — replaces the old hardcoded
@@ -1402,6 +1023,8 @@ const handleSaveExpense = async () => {
     return weeks;
   }, [transactions, analyticsYear, analyticsMonthIndex]);
 
+  // Labels now match however many weeks monthlyTrend actually returned
+  // (was a fixed ["W1".."W7"] regardless of the real week count).
   const monthWeekLabels = useMemo(
     () => monthlyTrend.map((_, i) => `W${i + 1}`),
     [monthlyTrend]
@@ -1470,47 +1093,157 @@ const handleSaveExpense = async () => {
   const others = goals.filter((g) => g.id !== emergency.id);
 
   const addContribution = async (goalId, amount) => {
-  const amt = Number(amount);
+    const amt = Number(amount);
+    if (!amt || !goalId) return;
+    const g = goals.find((x) => x.id === goalId);
 
-  if (!amt || !goalId) return;
+    if (USE_MOCK_DATA) {
+      setGoals((gs) => gs.map((x) => (x.id === goalId ? { ...x, saved: x.saved + amt } : x)));
+      const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setContributionHistory((h) => [{ id: Date.now(), goalId, goalName: g ? g.name : "Goal", amount: amt, time }, ...h]);
+      return;
+    }
 
-  const g = goals.find((x) => x.id === goalId);
+    setApiBusy(true);
+    try {
+      const data = await GoalsAPI.contribute(goalId, { amount: amt });
+      if (data?.goal) {
+        setGoals((gs) => gs.map((x) => (x.id === goalId ? normalizeGoal(data.goal) : x)));
+      } else {
+        setGoals((gs) => gs.map((x) => (x.id === goalId ? { ...x, saved: x.saved + amt } : x)));
+      }
+      const time = data?.entry?.time || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      // goalId is spread in explicitly since the backend's `entry` (if any)
+      // has no confirmed shape and may not include it.
+      const entry = data?.entry ? { ...data.entry, goalId } : { id: Date.now(), goalId, goalName: g ? g.name : "Goal", amount: amt, time };
+      setContributionHistory((h) => [entry, ...h]);
+    } catch (err) {
+      reportApiError(err, "Couldn't save this contribution. Please try again.");
+    } finally {
+      setApiBusy(false);
+    }
+  };
 
-  if (USE_MOCK_DATA) {
-    setGoals((gs) =>
-      gs.map((x) =>
-        x.id === goalId
-          ? { ...x, saved: x.saved + amt }
-          : x
-      )
-    );
+  /* ------------------------------ EDIT / DELETE GOAL ------------------------------ */
+  // See GoalsAPI.update/remove — routes are unconfirmed against the actual
+  // backend savings router, unlike list/create/contribute.
+  const editGoal = async (goalId, { name, target } = {}) => {
+    if (!goalId) return;
+    const trimmedName = name != null ? name.trim() : undefined;
+    if (trimmedName === "") return; // don't allow blanking the name
+    const numTarget = target != null && target !== "" ? Number(target) : undefined;
+    if (numTarget !== undefined && (!numTarget || numTarget <= 0)) return;
+    if (trimmedName === undefined && numTarget === undefined) return;
 
-    const time = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    if (USE_MOCK_DATA) {
+      setGoals((gs) => gs.map((x) => (x.id === goalId
+        ? { ...x, ...(trimmedName !== undefined ? { name: trimmedName } : {}), ...(numTarget !== undefined ? { target: numTarget } : {}) }
+        : x)));
+      return;
+    }
 
-    setContributionHistory((h) => [
-      {
-        id: Date.now(),
-        goalName: g ? g.name : "Goal",
-        amount: amt,
-        time,
-      },
-      ...h,
-    ]);
+    setApiBusy(true);
+    try {
+      const payload = {};
+      if (trimmedName !== undefined) payload.title = trimmedName;
+      if (numTarget !== undefined) payload.targetAmount = numTarget;
+      const updated = await GoalsAPI.update(goalId, payload);
+      setGoals((gs) => gs.map((x) => {
+        if (x.id !== goalId) return x;
+        if (updated) return { ...x, ...normalizeGoal(updated) };
+        // Fallback if the backend returns an empty/unexpected body.
+        return { ...x, ...(trimmedName !== undefined ? { name: trimmedName } : {}), ...(numTarget !== undefined ? { target: numTarget } : {}) };
+      }));
+    } catch (err) {
+      reportApiError(err, "Couldn't update this goal. Please try again.");
+    } finally {
+      setApiBusy(false);
+    }
+  };
 
-    return;
-  }
+  const deleteGoal = async (goalId) => {
+    if (!goalId) return;
+    const prevGoals = goals;
+    setGoals((gs) => gs.filter((x) => x.id !== goalId));
+    setExpandedGoalId((id) => (id === goalId ? null : id));
 
-  navigate("addExpense", {
-    type: "savingsContribution",
-    goal: g,
-  });
-};
-      
+    if (USE_MOCK_DATA) return;
 
- 
+    setApiBusy(true);
+    try {
+      await GoalsAPI.remove(goalId);
+    } catch (err) {
+      setGoals(prevGoals); // roll back the optimistic removal
+      reportApiError(err, "Couldn't delete this goal. Please try again.");
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
+  /* --------------------------- EDIT / DELETE CONTRIBUTION -------------------------- */
+  // No backend route exists for a single contribution — only
+  // PATCH /savings/:id/contribute (adds to currentAmount) is confirmed.
+  // Editing/deleting is done by sending a compensating amount through that
+  // same endpoint (delta for edit, negative of the original for delete)
+  // and updating local contributionHistory to match. This assumes the
+  // backend accepts negative amounts in that call — if it rejects them,
+  // this needs a real backend route instead.
+  const editContribution = async (historyId, newAmount) => {
+    const entry = contributionHistory.find((h) => h.id === historyId);
+    if (!entry || !entry.goalId) return;
+    const newAmt = Number(newAmount);
+    if (!newAmt || newAmt <= 0) return;
+    const delta = newAmt - Number(entry.amount);
+    if (delta === 0) return;
+
+    if (USE_MOCK_DATA) {
+      setGoals((gs) => gs.map((x) => (x.id === entry.goalId ? { ...x, saved: Math.max(0, x.saved + delta) } : x)));
+      setContributionHistory((h) => h.map((x) => (x.id === historyId ? { ...x, amount: newAmt } : x)));
+      return;
+    }
+
+    setApiBusy(true);
+    try {
+      const data = await GoalsAPI.contribute(entry.goalId, { amount: delta });
+      if (data?.goal) {
+        setGoals((gs) => gs.map((x) => (x.id === entry.goalId ? normalizeGoal(data.goal) : x)));
+      } else {
+        setGoals((gs) => gs.map((x) => (x.id === entry.goalId ? { ...x, saved: Math.max(0, x.saved + delta) } : x)));
+      }
+      setContributionHistory((h) => h.map((x) => (x.id === historyId ? { ...x, amount: newAmt } : x)));
+    } catch (err) {
+      reportApiError(err, "Couldn't update this contribution. Please try again.");
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
+  const deleteContribution = async (historyId) => {
+    const entry = contributionHistory.find((h) => h.id === historyId);
+    if (!entry || !entry.goalId) return;
+    const negAmt = -Number(entry.amount);
+
+    if (USE_MOCK_DATA) {
+      setGoals((gs) => gs.map((x) => (x.id === entry.goalId ? { ...x, saved: Math.max(0, x.saved + negAmt) } : x)));
+      setContributionHistory((h) => h.filter((x) => x.id !== historyId));
+      return;
+    }
+
+    setApiBusy(true);
+    try {
+      const data = await GoalsAPI.contribute(entry.goalId, { amount: negAmt });
+      if (data?.goal) {
+        setGoals((gs) => gs.map((x) => (x.id === entry.goalId ? normalizeGoal(data.goal) : x)));
+      } else {
+        setGoals((gs) => gs.map((x) => (x.id === entry.goalId ? { ...x, saved: Math.max(0, x.saved + negAmt) } : x)));
+      }
+      setContributionHistory((h) => h.filter((x) => x.id !== historyId));
+    } catch (err) {
+      reportApiError(err, "Couldn't delete this contribution. Please try again.");
+    } finally {
+      setApiBusy(false);
+    }
+  };
 
   const handleCreateGoal = async () => {
     if (!newGoalName.trim() || !newGoalTarget) return;
@@ -1524,15 +1257,17 @@ const handleSaveExpense = async () => {
 
     setApiBusy(true);
     try {
-      // Backend expects title and targetAmount
+      // Backend validator requires `title` and `targetAmount` (confirmed via
       // the 400 response from POST /savings) — NOT `name`/`target`.
       const created = await GoalsAPI.create({ title: newGoalName.trim(), targetAmount: Number(newGoalTarget) });
-      // Normalize the return goal.
+      // Normalize whatever the backend sends back into the shape the rest
+      // of the UI expects (same helper used for the initial goals fetch).
       const normalized = created ? { ...localGoal, ...normalizeGoal(created) } : localGoal;
       setGoals((gs) => [...gs, normalized]);
       setNewGoalName(""); setNewGoalTarget(""); setShowAddGoal(false);
     } catch (err) {
       reportApiError(err, "Couldn't create this goal. Please try again.");
+    } finally {
       setApiBusy(false);
     }
   };
@@ -1561,11 +1296,31 @@ const handleSaveExpense = async () => {
   const LARGE_TRANSACTION_THRESHOLD = 50000;
   const BILLS_LOOKBACK_DAYS = 30;
 
-  
+  const daysAgo = (iso) => {
+    if (!iso) return Infinity;
+    const diffMs = new Date() - new Date(iso);
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  };
+  const relativeWhen = (iso) => {
+    const n = daysAgo(iso);
+    if (n <= 0) return "Today";
+    if (n === 1) return "Yesterday";
+    if (!Number.isFinite(n)) return "";
+    return `${n}d ago`;
+  };
+  const groupFor = (iso) => {
+    const n = daysAgo(iso);
+    if (n <= 0) return "Today";
+    if (n === 1) return "Yesterday";
+    return "Earlier";
+  };
+
   const generatedNotifications = useMemo(() => {
     const items = [];
 
-   // Budget alerts
+    // Alerts — budget at/over its limit. b.percentageUsed is
+    // backend-computed (confirmed via budget.service.js's
+    // calculateBudgetStats, aggregated from real transactions).
     budgets.forEach((b) => {
       if ((b.percentageUsed || 0) >= BUDGET_ALERT_THRESHOLD_PCT) {
         items.push({
@@ -1582,7 +1337,7 @@ const handleSaveExpense = async () => {
       }
     });
 
-    // Large expense alerts
+    // Alerts — any single expense transaction over the threshold.
     transactions.forEach((t) => {
       if (t.type && t.type !== "Expense") return;
       if ((t.amount || 0) < LARGE_TRANSACTION_THRESHOLD) return;
@@ -1599,7 +1354,7 @@ const handleSaveExpense = async () => {
       });
     });
 
-    // Recent bill payments
+    // Bills — recent transactions actually logged under the "Bills" category.
     transactions.forEach((t) => {
       if (t.type && t.type !== "Expense") return;
       if (t.cat !== "Bills") return;
@@ -1617,10 +1372,8 @@ const handleSaveExpense = async () => {
       });
     });
 
-    
+    // Goals — real contributions already recorded via addContribution.
     contributionHistory.forEach((c) => {
-
-
       items.push({
         id: `goal-contrib-${c.id}`,
         cat: "Goals",
@@ -1634,21 +1387,22 @@ const handleSaveExpense = async () => {
       });
     });
 
-goals.forEach((g) => {
-  if (g.target > 0 && g.saved >= g.target) {
-    items.push({
-      id: `goal-complete-${g.id}`,
-      cat: "Goals",
-      type: "Goal Reached",
-      body: `You've reached your ${g.name} goal!`,
-      icon: HandCoins,
-      unread: false,
-      relatedCategory: null,
-      when: "",
-      group: "Earlier",
+    // Goals — a goal that's been fully funded.
+    goals.forEach((g) => {
+      if (g.target > 0 && g.saved >= g.target) {
+        items.push({
+          id: `goal-complete-${g.id}`,
+          cat: "Goals",
+          type: "Goal Reached",
+          body: `You've reached your ${g.name} goal!`,
+          icon: HandCoins,
+          unread: false,
+          relatedCategory: null,
+          when: "",
+          group: "Earlier",
+        });
+      }
     });
-  }
-});
 
     return items;
   }, [budgets, transactions, contributionHistory, goals]);
@@ -1726,249 +1480,35 @@ goals.forEach((g) => {
     }
   };
 
-    const value = {
-    screen,
-    setScreen,
-    screenData,
-    setScreenData,
-    history,
-    setHistory,
-    name,
-    setName,
-    darkMode,
-    setDarkMode,
-    biometricEnabled,
-    setBiometricEnabled,
-    twoFactorEnabled,
-    setTwoFactorEnabled,
-    toast,
-    setToast,
-    showToast,
-    profileEmail,
-    setProfileEmail,
-    profilePhone,
-    setProfilePhone,
-    isEditingProfile,
-    setIsEditingProfile,
-    transactions,
-    setTransactions,
-    goals,
-    setGoals,
-    notifications,
-    setNotifications,
-    income,
-    setIncome,
-    currency,
-    setCurrency,
-    budgetCats,
-    setBudgetCats,
-    allocations,
-    setAllocations,
-    budgets,
-    setBudgets,
-    budgetsByCategory,
-    notifFilter,
-    setNotifFilter,
-    txFilter,
-    setTxFilter,
-
-    navigate,
-    goToTab,
-    goBack,
-
-    totalBalance,
-    setTotalBalance,
-    totalIncome,
-    setTotalIncome,
-    totalExpenses,
-    totalAllocated,
-    wizardTotalAllocated,
-    totalBudgetSpent,
-    budgetRemaining,
-
-    phone,
-    setPhone,
-    pin,
-    setPin,
-
-    showLoginPw,
-    setShowLoginPw,
-    rememberPassword,
-    setRememberPassword,
-    loginError,
-    setLoginError,
-    handleLogin,
-
-    showPw,
-    setShowPw,
-
-    lastName,
-    setLastName,
-    loginEmail,
-    setLoginEmail,
-
-    signupEmail,
-    setSignupEmail,
-    signupPhone,
-    setSignupPhone,
-    signupPassword,
-    setSignupPassword,
-    signupErrors,
-    setSignupErrors,
-    validatePassword,
-    handleCreateAccount,
-    clearErr,
-
-    otp,
-    setOtp,
-    otpError,
-    handleVerifyOtp,
-    handleResendOtp,
-    resendSeconds,
-    setResendSeconds,
-
-    currencies,
-
-    budgetStep,
-    setBudgetStep,
-    incomeType,
-    setIncomeType,
-    customIncomeInputRef,
-    steps,
-    toggleCat,
-
-    spendingBreakdown,
-    donutGradient,
-    analyticsSpendingBreakdown,
-    analyticsDonutGradient,
-
-    emergency,
-    unreadCount,
-
-    expAmount,
-    setExpAmount,
-    expAccount,
-    setExpAccount,
-    showAccountDropdown,
-    setShowAccountDropdown,
-    expCat,
-    setExpCat,
-    expNote,
-    setExpNote,
-    expDate,
-    setExpDate,
-
-    ordinal,
-    formatLongDate,
-    formatShortGroupDate,
-    addExpenseCats,
-
-    incAmount,
-    setIncAmount,
-    incSource,
-    setIncSource,
-    incAccount,
-    setIncAccount,
-    incCat,
-    setIncCat,
-    incNote,
-    setIncNote,
-    incDate,
-    setIncDate,
-    incomeSources,
-
-    txSearch,
-    setTxSearch,
-    txSortNewest,
-    setTxSortNewest,
-    searchedTx,
-    catFilteredTx,
-    filteredTx,
-    grouped,
-
-    dailyBudget,
-    spentToday,
-    weeklyBudget,
-    spentThisWeek,
-    weeklySpendTrend,
-    monthlyTrend,
-    weeklyTrend,
-    monthWeekLabels,
-    dayLabels,
-    monthNamesShort,
-    monthNamesFull,
-
-    analyticsPeriod,
-    setAnalyticsPeriod,
-    analyticsMonthIndex,
-    setAnalyticsMonthIndex,
-    analyticsYear,
-    setAnalyticsYear,
-    showMonthPicker,
-    setShowMonthPicker,
-    activeTrend,
-    activeLabels,
-    goToPrevMonth,
-    goToNextMonth,
-
-    contribAmount,
-    setContribAmount,
-    contributionHistory,
-    setContributionHistory,
-    showAllHistory,
-    setShowAllHistory,
-
-    showAddGoal,
-    setShowAddGoal,
-    newGoalName,
-    setNewGoalName,
-    newGoalTarget,
-    setNewGoalTarget,
-    expandedGoalId,
-    setExpandedGoalId,
-    otherContribAmount,
-    setOtherContribAmount,
-    others,
-    addContribution,
-
-    filteredNotifs,
-    notifGrouped,
-
-    apiBusy,
-
-    handleForgotPassword,
-    handleFinishBudget,
-    handleSaveExpense,
-    handleSaveIncome,
-    handleUpdateTransaction,
-    handleCreateGoal,
-    handleMarkNotificationRead,
-    handleMarkAllNotificationsRead,
-
-    handleSaveProfile,
-    handleToggleBiometric,
-    handleEnableBiometric,
-    handleToggleTwoFactor,
-
-    wallets,
-    categories,
-
-    newWalletName,
-    setNewWalletName,
-    walletFormError,
-    handleCreateWallet,
-
-    newCategoryName,
-    setNewCategoryName,
-    newCategoryType,
-    setNewCategoryType,
-    categoryFormError,
-    handleCreateCategory,
+  const value = {
+    screen, setScreen, history, setHistory, name, setName, darkMode, setDarkMode,
+    biometricEnabled, setBiometricEnabled, twoFactorEnabled, setTwoFactorEnabled, toast, setToast, showToast, profileEmail,
+    setProfileEmail, profilePhone, setProfilePhone, isEditingProfile, setIsEditingProfile, transactions, setTransactions, goals,
+    setGoals, notifications, setNotifications, income, setIncome, currency, setCurrency, budgetCats,
+    setBudgetCats, allocations, setAllocations, budgets, setBudgets, budgetsByCategory, notifFilter, setNotifFilter, txFilter, setTxFilter, navigate,
+    goToTab, goBack, totalIncome, setTotalIncome, totalExpenses, totalAllocated, wizardTotalAllocated, totalBudgetSpent, budgetRemaining, phone, setPhone,
+    pin, setPin, showLoginPw, setShowLoginPw, rememberPassword, setRememberPassword, loginError, setLoginError,
+    handleLogin, showPw, setShowPw, lastName, setLastName, loginEmail, setLoginEmail, signupEmail, setSignupEmail, signupPhone, setSignupPhone, signupPassword,
+    setSignupPassword, signupErrors, setSignupErrors, validatePassword, handleCreateAccount, clearErr, otp, setOtp,
+    resendSeconds, setResendSeconds, currencies, budgetStep, setBudgetStep, incomeType, setIncomeType, customIncomeInputRef,
+    steps, toggleCat, spendingBreakdown, donutGradient, analyticsSpendingBreakdown, analyticsDonutGradient, emergency, unreadCount, expAmount, setExpAmount,
+    expAccount, setExpAccount, showAccountDropdown, setShowAccountDropdown, expCat, setExpCat, expNote, setExpNote,
+    expDate, setExpDate, ordinal, formatLongDate, formatShortGroupDate, addExpenseCats, incAmount, setIncAmount,
+    incSource, setIncSource, incAccount, setIncAccount, incCat, setIncCat, incNote, setIncNote, incDate, setIncDate, incomeSources, txSearch,
+    setTxSearch, txSortNewest, setTxSortNewest, searchedTx, catFilteredTx, filteredTx, grouped, dailyBudget,
+    spentToday, weeklyBudget, spentThisWeek, weeklySpendTrend, monthlyTrend, weeklyTrend, monthWeekLabels, dayLabels, monthNamesShort, monthNamesFull, analyticsPeriod,
+    setAnalyticsPeriod, analyticsMonthIndex, setAnalyticsMonthIndex, analyticsYear, setAnalyticsYear, showMonthPicker, setShowMonthPicker, activeTrend,
+    activeLabels, goToPrevMonth, goToNextMonth, contribAmount, setContribAmount, contributionHistory, setContributionHistory, showAllHistory,
+    setShowAllHistory, showAddGoal, setShowAddGoal, newGoalName, setNewGoalName, newGoalTarget, setNewGoalTarget, expandedGoalId,
+    setExpandedGoalId, otherContribAmount, setOtherContribAmount, others, addContribution, filteredNotifs, notifGrouped,
+    otpError, handleVerifyOtp, handleResendOtp, apiBusy, handleForgotPassword, handleFinishBudget,
+    handleSaveExpense, handleSaveIncome, handleCreateGoal, editGoal, deleteGoal, editContribution, deleteContribution,
+    handleMarkNotificationRead, handleMarkAllNotificationsRead,
+    handleSaveProfile, handleToggleBiometric, handleEnableBiometric, handleToggleTwoFactor,
+    wallets, categories,
+    newWalletName, setNewWalletName, walletFormError, handleCreateWallet,
+    newCategoryName, setNewCategoryName, newCategoryType, setNewCategoryType, categoryFormError, setCategoryFormError, handleCreateCategory,
   };
 
-    return (
-      <AppContext.Provider value={value}>
-        {children}
-      </AppContext.Provider>
-    );
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
