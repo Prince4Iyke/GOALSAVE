@@ -1460,9 +1460,11 @@ export function AppProvider({ children }) {
   // unchanged. Live mode prefers real backend notifications the moment
   // that module exists (notificationsBackendAvailable), and falls back to
   // the real-data-generated list until then.
-  const activeNotifications = USE_MOCK_DATA
-    ? notifications
-    : (notificationsBackendAvailable ? notifications : generatedNotifications);
+ const activeNotifications = USE_MOCK_DATA
+  ? notifications
+  : (notificationsBackendAvailable && notifications.every((n) => n && n.icon)
+      ? notifications
+      : generatedNotifications);
   const unreadCount = activeNotifications.filter((n) => n.unread).length;
   const filteredNotifs = notifFilter === "All" ? activeNotifications : activeNotifications.filter((n) => n.cat === notifFilter);
   const notifGrouped = filteredNotifs.reduce((acc, n) => { (acc[n.group] = acc[n.group] || []).push(n); return acc; }, {});
