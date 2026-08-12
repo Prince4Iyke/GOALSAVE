@@ -234,7 +234,7 @@ export default function BudgetWizard() {
                   <span>{c.label}</span><span>{fmtNShort(allocations[c.key] || 0)}</span>
                 </div>
                 <input
-                  type="range" min={0} max={150000} step={1000}
+                  type="range" min={0} max={150000} step={5000}
                   value={allocations[c.key] || 0}
                   onChange={(e) => setAllocations((a) => ({ ...a, [c.key]: Number(e.target.value) }))}
                   style={{ width: "100%", accentColor: GREEN }}
@@ -256,7 +256,7 @@ export default function BudgetWizard() {
             <div><div style={{ fontFamily: FONT, fontSize: 11, color: C.textMuted }}>Total Allocation</div><div style={{ fontFamily: FONT, fontWeight: 700, color: "#000" }}>{fmtNShort(wizardTotalAllocated)}</div></div>
             <div style={{ textAlign: "right" }}><div style={{ fontFamily: FONT, fontSize: 11, color: C.textMuted }}>Remaining</div><div style={{ fontFamily: FONT, fontWeight: 700, color: "#000" }}>{fmtNShort(Math.max(0, income - wizardTotalAllocated))}</div></div>
           </div>
-          <PrimaryButton style={{ marginTop: 18, background: GREEN, borderRadius: 20, height: 60, fontFamily: FONT, fontWeight: 600, fontSize: 22, letterSpacing: "-0.02em", color: "#fff" }} onClick={handleFinishBudget}>Continue</PrimaryButton>
+          <PrimaryButton style={{ marginTop: 18, background: GREEN, borderRadius: 20, height: 60, fontFamily: FONT, fontWeight: 600, fontSize: 22, letterSpacing: "-0.02em", color: "#fff" }} onClick={() => setBudgetStep(4)}>Continue</PrimaryButton>
         </div>
       )}
 
@@ -268,14 +268,14 @@ export default function BudgetWizard() {
           <h3 style={{ fontFamily: FONT, color: "#000", fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em" }}>You're all set!</h3>
           <p style={{ fontFamily: FONT, color: C.textMuted, fontSize: 14, marginTop: 6 }}>Your account is ready to go. Start tracking, budgeting and achieving your goals.</p>
           <div style={{ width: "100%", border: `1px solid ${SOFT_BORDER}`, borderRadius: 10, padding: 16, marginTop: 20, textAlign: "left" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}><span style={{ fontFamily: FONT, color: C.textMuted, fontSize: 13 }}>Monthly Income</span><b style={{ fontFamily: FONT, color: "#000" }}>{fmtNShort(income ?? 0)}</b></div>
-            {/* Was `fmtNShort(totalAllocated ?? 0)` — same
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}><span style={{ fontFamily: FONT, color: C.textMuted, fontSize: 13 }}>Monthly Income</span><b style={{ fontFamily: FONT, color: "#000" }}>{fmtNShort(income || 245000)}</b></div>
+            {/* Was `fmtNShort(totalAllocated || 215000)` — same
                 budgetsByCategory-scoping issue as Step 3: before the save
                 happens (this screen renders BEFORE handleFinishBudget is
                 called, since it fires from the button below), totalAllocated
                 is 0, so this always fell back to the hardcoded 215000 mock
                 value instead of reflecting what the user actually chose. */}
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}><span style={{ fontFamily: FONT, color: C.textMuted, fontSize: 13 }}>Total Budget</span><b style={{ fontFamily: FONT, color: "#000" }}>{fmtNShort(wizardTotalAllocated ?? 0)}</b></div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}><span style={{ fontFamily: FONT, color: C.textMuted, fontSize: 13 }}>Total Budget</span><b style={{ fontFamily: FONT, color: "#000" }}>{fmtNShort(wizardTotalAllocated || 215000)}</b></div>
             {/* "Savings Goal" here was static text — always "Not set yet",
                 never wired to any state or API call. It isn't a data-loading
                 bug; nothing was ever fetching or computing a value for it.
@@ -302,14 +302,7 @@ export default function BudgetWizard() {
               BudgetAPI call entirely, so the wizard's income/categories/allocations were
               never persisted to the backend. handleFinishBudget already does the save (via
               BudgetAPI.create/update) AND the same navigation, so call it directly. */}
-          <PrimaryButton
-            style={{ marginTop: 22 }}
-            onClick={() =>
-              history.length === 0
-                ? navigate("securityPrompt")
-                : goToTab("dashboard")
-            }
-          >
+          <PrimaryButton style={{ marginTop: 22 }} onClick={handleFinishBudget}>
             {history.length === 0 ? "Continue" : "Go to Dashboard"}
           </PrimaryButton>
         </div>
