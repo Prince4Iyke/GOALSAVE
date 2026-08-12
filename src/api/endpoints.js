@@ -15,30 +15,40 @@ import { request, setToken } from "./client";
 /* --------------------------------- AUTH ---------------------------------- */
 
 export const AuthAPI = {
-  // POST /api/v1/register { firstName, lastName, email, password } -> { token, user }
-  // The backend mounts registration at /register (not under /auth or /signup).
   signup: async (payload) => {
-    const data = await request("/auth/register", { method: "POST", body: payload, auth: false });
-    if (data?.token) setToken(data.token);
+    const data = await request("/auth/signup", {
+      method: "POST",
+      body: payload,
+      auth: false,
+    });
+
+    if (data?.token) {
+      setToken(data.token);
+    }
+
     return data;
   },
 
-  // POST /api/auth/login { email, password } -> { token, user }
   login: async (payload) => {
-    const data = await request("/auth/login", { method: "POST", body: payload, auth: false });
-    if (data?.token) setToken(data.token);
+    const data = await request("/auth/login", {
+      method: "POST",
+      body: payload,
+      auth: false,
+    });
+
+    if (data?.token) {
+      setToken(data.token);
+    }
+
     return data;
   },
 
-  // TODO: GET /api/auth/me does not exist on the backend yet.
-  // Backend needs a protected route that decodes the JWT and returns the
-  // current user (auth.middleware.js + a small controller method).
-  // Left in place so the app doesn't crash on import, but this call WILL
-  // 401/404 until the backend route is added.
   me: () => request("/auth/me"),
 
-  logout: () => setToken(null),
+  logout: () => {setToken(null);
+  },
 };
+
 
 /* -------------------------------- PROFILE --------------------------------- */
 
