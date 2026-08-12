@@ -153,7 +153,10 @@ export default function Notifications() {
                 }}
               >
                 <div style={{ width: 40, height: 40, borderRadius: 8, background: "rgba(217,217,217,0.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <n.icon size={19} color={GREEN} />
+          {(() => {
+  const NIcon = n.icon || Bell;
+  return <NIcon size={19} color={GREEN} />;
+})()}
                 </div>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 19, lineHeight: "23px", letterSpacing: "-0.02em", color: "#000000" }}>
