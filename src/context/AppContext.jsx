@@ -661,7 +661,7 @@ export function AppProvider({ children }) {
                 /already exists for this period/i.test(err.message || "");
               if (!isPeriodConflict) throw err;
 
-              const fresh = await BudgetAPI.get().catch(() => null);
+              const fresh = await BudgetAPI.list().catch(() => null);
               const match = Array.isArray(fresh)
                 ? fresh.find((b) => b.category?.name === c.key)
                 : null;
@@ -671,7 +671,7 @@ export function AppProvider({ children }) {
             }
           })
         );
-        const fresh = await BudgetAPI.get();
+         const fresh = await BudgetAPI.list();
         if (Array.isArray(fresh)) setBudgets(fresh);
         showToast("Your budget has been saved.");
       } catch (err) {
