@@ -122,11 +122,12 @@ export const BudgetAPI = {
       body: payload,
     }),
 
-  update: (id, payload) =>
-    request(`/budgets/${id}`, {
-      method: "PATCH",
-      body: payload,
-    }),
+  update: (id, payload) => {
+    if (!id || id === "undefined") {
+      throw new Error("BudgetAPI.update called without a valid budget id");
+    }
+    return request(`/budgets/${id}`, { method: "PATCH", body: payload });
+  },
 
   remove: (id) =>
     request(`/budgets/${id}`, {
