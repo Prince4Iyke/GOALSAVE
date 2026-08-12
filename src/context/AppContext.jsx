@@ -623,14 +623,19 @@ try {
     if (existing) return existing._id || existing.id;
     try {
       const created = await CategoriesAPI.create({ name: categoryName, type });
+      if (!created || !(created._id || created.id)) {
+        throw new Error("Category creation returned no id");
+      }
       setCategories((cs) => [...cs, created]);
       return created._id || created.id;
     } catch (err) {
       // Category schema enforces a unique (user, name, type, isActive)
       // index (confirmed in category.model.js) — if this exact category
-      // was created elsewhere (another tab/session) between our last
-      // GET /categories and this create call, the create fails on that
-      // constraint. Refetch and retry the lookup instead of treating this
+      // was created elsewhere (another tab/session, or a concurrent
+      // resolveCategoryId call for a different checked category racing
+      // this one) between our last GET /categories and this create call,
+      // the create fails on that constraint, or the create response is
+      // malformed. Refetch and retry the lookup instead of treating this
       // as a hard failure.
       const fresh = await CategoriesAPI.list().catch(() => null);
       if (Array.isArray(fresh)) {
