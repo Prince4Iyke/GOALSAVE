@@ -423,25 +423,6 @@ export function AppProvider({ children }) {
         setProfileEmail(email);
         setProfilePhoneState(loadLocalPhone(email));
       }
-
-      // The initial-mount useEffect ran before we had a real auth token, so
-      // categories/wallets/budgets/transactions/goals are still whatever
-      // that pre-auth fetch left behind (empty, since it 401'd). Refetch now
-      // that we're actually authenticated, so the rest of the app isn't
-      // working off stale/empty local state right after login.
-      const [freshCats, freshWallets, freshBudgets, freshTx, freshGoals] = await Promise.all([
-        CategoriesAPI.list().catch(() => null),
-        WalletsAPI.list().catch(() => null),
-        BudgetAPI.get().catch(() => null),
-        fetchAllTransactions().catch(() => null),
-        GoalsAPI.list().catch(() => null),
-      ]);
-      if (Array.isArray(freshCats)) setCategories(freshCats);
-      if (Array.isArray(freshWallets)) setWallets(freshWallets);
-      if (Array.isArray(freshBudgets)) setBudgets(freshBudgets);
-      if (Array.isArray(freshTx)) setTransactions(freshTx.map(normalizeTransaction));
-      if (Array.isArray(freshGoals)) setGoals(freshGoals.map(normalizeGoal));
-
       goToTab("dashboard");
     } catch (err) {
       setLoginError(err instanceof ApiError ? err.message : "Login failed. Please try again.");
@@ -500,49 +481,6 @@ export function AppProvider({ children }) {
       } catch {
         /* ignore storage errors (e.g. private browsing) */
       }
-
-      setApiBusy(true);
-try {
-  const data = await AuthAPI.signup({
-    firstName: name.trim(),
-    lastName: lastName.trim(),
-    email: signupEmail.trim(),
-    password: signupPassword,
-  });
-  const email = data?.user?.email || signupEmail.trim();
-  if (data?.user) {
-    setName(data.user.firstName || name.trim());
-  }
-  setProfileEmail(email);
-  const phoneVal = signupPhone.trim();
-  setProfilePhoneState(phoneVal);
-  try {
-    localStorage.setItem(phoneStorageKey(email), phoneVal);
-  } catch {
-    /* ignore storage errors (e.g. private browsing) */
-  }
-
-  // The initial-mount useEffect ran before this token existed, so
-  // categories/wallets/budgets are still empty local state. Refetch now
-  // that we're actually authenticated, so the Budget Wizard (which runs
-  // right after signup) has real data to resolve categories against
-  // instead of creating them blind against an empty local cache.
-  const [freshCats, freshWallets, freshBudgets] = await Promise.all([
-    CategoriesAPI.list().catch(() => null),
-    WalletsAPI.list().catch(() => null),
-    BudgetAPI.get().catch(() => null),
-  ]);
-  if (Array.isArray(freshCats)) setCategories(freshCats);
-  if (Array.isArray(freshWallets)) setWallets(freshWallets);
-  if (Array.isArray(freshBudgets)) setBudgets(freshBudgets);
-
-  navigate("income");
-} catch (err) {
-  setSignupErrors({ email: err instanceof ApiError ? err.message : "Sign up failed. Please try again." });
-} finally {
-  setApiBusy(false);
-}
-      
       navigate("income");
     } catch (err) {
       setSignupErrors({ email: err instanceof ApiError ? err.message : "Sign up failed. Please try again." });
@@ -623,19 +561,14 @@ try {
     if (existing) return existing._id || existing.id;
     try {
       const created = await CategoriesAPI.create({ name: categoryName, type });
-      if (!created || !(created._id || created.id)) {
-        throw new Error("Category creation returned no id");
-      }
       setCategories((cs) => [...cs, created]);
       return created._id || created.id;
     } catch (err) {
       // Category schema enforces a unique (user, name, type, isActive)
       // index (confirmed in category.model.js) — if this exact category
-      // was created elsewhere (another tab/session, or a concurrent
-      // resolveCategoryId call for a different checked category racing
-      // this one) between our last GET /categories and this create call,
-      // the create fails on that constraint, or the create response is
-      // malformed. Refetch and retry the lookup instead of treating this
+      // was created elsewhere (another tab/session) between our last
+      // GET /categories and this create call, the create fails on that
+      // constraint. Refetch and retry the lookup instead of treating this
       // as a hard failure.
       const fresh = await CategoriesAPI.list().catch(() => null);
       if (Array.isArray(fresh)) {
@@ -728,7 +661,7 @@ try {
                 /already exists for this period/i.test(err.message || "");
               if (!isPeriodConflict) throw err;
 
-              const fresh = await BudgetAPI.get().catch(() => null);
+              const fresh = await BudgetAPI.list().catch(() => null);
               const match = Array.isArray(fresh)
                 ? fresh.find((b) => b.category?.name === c.key)
                 : null;
@@ -1527,11 +1460,9 @@ try {
   // unchanged. Live mode prefers real backend notifications the moment
   // that module exists (notificationsBackendAvailable), and falls back to
   // the real-data-generated list until then.
- const activeNotifications = USE_MOCK_DATA
-  ? notifications
-  : (notificationsBackendAvailable && notifications.every((n) => n && n.icon)
-      ? notifications
-      : generatedNotifications);
+  const activeNotifications = USE_MOCK_DATA
+    ? notifications
+    : (notificationsBackendAvailable ? notifications : generatedNotifications);
   const unreadCount = activeNotifications.filter((n) => n.unread).length;
   const filteredNotifs = notifFilter === "All" ? activeNotifications : activeNotifications.filter((n) => n.cat === notifFilter);
   const notifGrouped = filteredNotifs.reduce((acc, n) => { (acc[n.group] = acc[n.group] || []).push(n); return acc; }, {});
