@@ -56,7 +56,9 @@ export default function Dashboard() {
   const ctx = useApp();
   const C = useTheme();
   const {
-  name, darkMode, setDarkMode, navigate, goToTab, totalBalance, totalIncome, totalExpenses, totalAllocated, totalBudgetSpent, budgetRemaining, unreadCount, spendingBreakdown, donutGradient,
+    name, darkMode, setDarkMode, navigate, goToTab,
+    totalIncome, totalExpenses, totalAllocated, totalBudgetSpent, budgetRemaining, unreadCount,
+    spendingBreakdown, donutGradient,
     // `emergency` is `goals.find(g => g.name === "Emergency Fund")` in
     // AppContext — it's `undefined` for any account with no goals yet
     // (e.g. right after signup, or if GoalsAPI.list() failed/returned
@@ -64,10 +66,6 @@ export default function Dashboard() {
     // undefined.saved / undefined.target and crashes the whole screen.
     emergency = { saved: 0, target: 1 },
   } = ctx;
-
-    console.log("DASHBOARD DISPLAY totalBalance:", totalBalance);
-    console.log("DASHBOARD DISPLAY totalIncome:", totalIncome);
-    console.log("DASHBOARD DISPLAY totalExpenses:", totalExpenses);
 
   // Real completion percentage for the Emergency Fund card. Uses
   // Number.isFinite rather than `|| fallback` — a genuine 0% (no savings
@@ -155,7 +153,7 @@ export default function Dashboard() {
           TOTAL BALANCE
         </div>
         <div style={ heading(33, 40, { fontWeight: 500, fontSize: 30, margin: "0 0 50px", position: "relative", boxShadow: "0 16px 30px -12px rgba(12,122,56,0.45)", color: T.white,})}>
-          {fmtN(totalBalance)}
+          {fmtN(totalIncome - totalExpenses)}
         </div>
 
         <div style={{ height: 0, borderTop: "3px solid rgba(255,255,255,0.5)", marginBottom: 12 }} />
