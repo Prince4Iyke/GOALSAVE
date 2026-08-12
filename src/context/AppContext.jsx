@@ -661,7 +661,7 @@ export function AppProvider({ children }) {
                 /already exists for this period/i.test(err.message || "");
               if (!isPeriodConflict) throw err;
 
-              const fresh = await BudgetAPI.get().catch(() => null);
+              const fresh = await BudgetAPI.list().catch(() => null);
               const match = Array.isArray(fresh)
                 ? fresh.find((b) => b.category?.name === c.key)
                 : null;
