@@ -423,6 +423,25 @@ export function AppProvider({ children }) {
         setProfileEmail(email);
         setProfilePhoneState(loadLocalPhone(email));
       }
+
+      // The initial-mount useEffect ran before we had a real auth token, so
+      // categories/wallets/budgets/transactions/goals are still whatever
+      // that pre-auth fetch left behind (empty, since it 401'd). Refetch now
+      // that we're actually authenticated, so the rest of the app isn't
+      // working off stale/empty local state right after login.
+      const [freshCats, freshWallets, freshBudgets, freshTx, freshGoals] = await Promise.all([
+        CategoriesAPI.list().catch(() => null),
+        WalletsAPI.list().catch(() => null),
+        BudgetAPI.get().catch(() => null),
+        fetchAllTransactions().catch(() => null),
+        GoalsAPI.list().catch(() => null),
+      ]);
+      if (Array.isArray(freshCats)) setCategories(freshCats);
+      if (Array.isArray(freshWallets)) setWallets(freshWallets);
+      if (Array.isArray(freshBudgets)) setBudgets(freshBudgets);
+      if (Array.isArray(freshTx)) setTransactions(freshTx.map(normalizeTransaction));
+      if (Array.isArray(freshGoals)) setGoals(freshGoals.map(normalizeGoal));
+
       goToTab("dashboard");
     } catch (err) {
       setLoginError(err instanceof ApiError ? err.message : "Login failed. Please try again.");
@@ -481,6 +500,49 @@ export function AppProvider({ children }) {
       } catch {
         /* ignore storage errors (e.g. private browsing) */
       }
+
+      setApiBusy(true);
+try {
+  const data = await AuthAPI.signup({
+    firstName: name.trim(),
+    lastName: lastName.trim(),
+    email: signupEmail.trim(),
+    password: signupPassword,
+  });
+  const email = data?.user?.email || signupEmail.trim();
+  if (data?.user) {
+    setName(data.user.firstName || name.trim());
+  }
+  setProfileEmail(email);
+  const phoneVal = signupPhone.trim();
+  setProfilePhoneState(phoneVal);
+  try {
+    localStorage.setItem(phoneStorageKey(email), phoneVal);
+  } catch {
+    /* ignore storage errors (e.g. private browsing) */
+  }
+
+  // The initial-mount useEffect ran before this token existed, so
+  // categories/wallets/budgets are still empty local state. Refetch now
+  // that we're actually authenticated, so the Budget Wizard (which runs
+  // right after signup) has real data to resolve categories against
+  // instead of creating them blind against an empty local cache.
+  const [freshCats, freshWallets, freshBudgets] = await Promise.all([
+    CategoriesAPI.list().catch(() => null),
+    WalletsAPI.list().catch(() => null),
+    BudgetAPI.get().catch(() => null),
+  ]);
+  if (Array.isArray(freshCats)) setCategories(freshCats);
+  if (Array.isArray(freshWallets)) setWallets(freshWallets);
+  if (Array.isArray(freshBudgets)) setBudgets(freshBudgets);
+
+  navigate("income");
+} catch (err) {
+  setSignupErrors({ email: err instanceof ApiError ? err.message : "Sign up failed. Please try again." });
+} finally {
+  setApiBusy(false);
+}
+      
       navigate("income");
     } catch (err) {
       setSignupErrors({ email: err instanceof ApiError ? err.message : "Sign up failed. Please try again." });
