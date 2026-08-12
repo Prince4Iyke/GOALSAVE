@@ -671,7 +671,7 @@ export function AppProvider({ children }) {
             }
           })
         );
-         const fresh = await BudgetAPI.list();
+        const fresh = await BudgetAPI.get();
         if (Array.isArray(fresh)) setBudgets(fresh);
         showToast("Your budget has been saved.");
       } catch (err) {
@@ -795,6 +795,10 @@ export function AppProvider({ children }) {
     if (USE_MOCK_DATA) {
       setTransactions((t) => [localTx, ...t]);
       setExpAmount(""); setExpNote("");
+      // Popup confirmation the moment an expense is logged — separate from
+      // the persistent "Expense Logged" notification-feed entry generated
+      // in generatedNotifications below, which is the durable record.
+      showToast(`Expense of ${fmtNShort(localTx.amount)} logged.`);
       goToTab("transactions");
       return;
     }
@@ -832,7 +836,11 @@ export function AppProvider({ children }) {
           }
         : null;
       setTransactions((t) => [merged ? normalizeTransaction(merged) : localTx, ...t]);
+      const savedAmount = Number(expAmount);
       setExpAmount(""); setExpNote("");
+      // Popup confirmation on the real save too, same reasoning as the
+      // mock-mode branch above.
+      showToast(`Expense of ${fmtNShort(savedAmount)} logged.`);
       goToTab("transactions");
     } catch (err) {
       reportApiError(err, "Couldn't save this expense. Please try again.");
@@ -1092,13 +1100,30 @@ export function AppProvider({ children }) {
   const [otherContribAmount, setOtherContribAmount] = useState("");
   const others = goals.filter((g) => g.id !== emergency.id);
 
+  // Fires a one-time popup the moment a contribution pushes a goal to (or
+  // past) its target — separate from the persistent "Goal Reached" entry
+  // generated in generatedNotifications below, which stays in the feed.
+  // `wasComplete`, captured before the update in addContribution, is what
+  // keeps this from re-firing on every later render/contribution to an
+  // already-completed goal.
+  const checkGoalCompletion = (wasComplete, updated) => {
+    if (!updated) return;
+    if (wasComplete) return;
+    if (updated.target > 0 && updated.saved >= updated.target) {
+      showToast(`\uD83C\uDF89 You've reached your ${updated.name} goal!`);
+    }
+  };
+
   const addContribution = async (goalId, amount) => {
     const amt = Number(amount);
     if (!amt || !goalId) return;
     const g = goals.find((x) => x.id === goalId);
+    const wasComplete = g ? g.saved >= g.target : false;
 
     if (USE_MOCK_DATA) {
+      const updated = g ? { ...g, saved: g.saved + amt } : null;
       setGoals((gs) => gs.map((x) => (x.id === goalId ? { ...x, saved: x.saved + amt } : x)));
+      checkGoalCompletion(wasComplete, updated);
       const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       setContributionHistory((h) => [{ id: Date.now(), goalId, goalName: g ? g.name : "Goal", amount: amt, time }, ...h]);
       return;
@@ -1108,9 +1133,13 @@ export function AppProvider({ children }) {
     try {
       const data = await GoalsAPI.contribute(goalId, { amount: amt });
       if (data?.goal) {
-        setGoals((gs) => gs.map((x) => (x.id === goalId ? normalizeGoal(data.goal) : x)));
+        const normalized = normalizeGoal(data.goal);
+        setGoals((gs) => gs.map((x) => (x.id === goalId ? normalized : x)));
+        checkGoalCompletion(wasComplete, normalized);
       } else {
+        const updated = g ? { ...g, saved: g.saved + amt } : null;
         setGoals((gs) => gs.map((x) => (x.id === goalId ? { ...x, saved: x.saved + amt } : x)));
+        checkGoalCompletion(wasComplete, updated);
       }
       const time = data?.entry?.time || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       // goalId is spread in explicitly since the backend's `entry` (if any)
@@ -1348,6 +1377,25 @@ export function AppProvider({ children }) {
         body: `${fmtNShort(t.amount)} spent on ${t.cat || "Uncategorized"}.`,
         icon: AlertTriangle,
         unread: true,
+        relatedCategory: t.cat || null,
+        when: relativeWhen(t.date),
+        group: groupFor(t.date),
+      });
+    });
+
+    // Transactions — every transaction logged (income and expense), so the
+    // notification feed reflects actual activity, not just budget/large-
+    // transaction alerts. Read=false by default; these are informational,
+    // not warnings, so they don't need the same red-dot urgency as Alerts.
+    transactions.forEach((t) => {
+      const isIncome = t.type === "Income";
+      items.push({
+        id: `tx-log-${t.id || t._id}`,
+        cat: "Transactions",
+        type: isIncome ? "Income Logged" : "Expense Logged",
+        body: `${isIncome ? "+" : "-"}${fmtNShort(t.amount)} \u2014 ${t.cat || "Uncategorized"}`,
+        icon: isIncome ? HandCoins : Receipt,
+        unread: false,
         relatedCategory: t.cat || null,
         when: relativeWhen(t.date),
         group: groupFor(t.date),
