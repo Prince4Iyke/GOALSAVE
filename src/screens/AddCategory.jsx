@@ -15,7 +15,7 @@ export default function AddCategory() {
     goBack, goToTab,
     newCategoryName, setNewCategoryName,
     newCategoryType, setNewCategoryType,
-    categoryFormError, handleCreateCategory, apiBusy,
+    categoryFormError, setCategoryFormError, handleCreateCategory, apiBusy,
   } = ctx;
 
   return (
@@ -27,7 +27,10 @@ export default function AddCategory() {
       </h4>
       <input
         value={newCategoryName}
-        onChange={(e) => setNewCategoryName(e.target.value)}
+        onChange={(e) => {
+          setNewCategoryName(e.target.value);
+          if (categoryFormError) setCategoryFormError("");
+        }}
         placeholder="e.g Food"
         style={{
           boxSizing: "border-box",
@@ -50,7 +53,10 @@ export default function AddCategory() {
         {["Expense", "Income"].map((t) => (
           <button
             key={t}
-            onClick={() => setNewCategoryType(t)}
+            onClick={() => {
+              setNewCategoryType(t);
+              if (categoryFormError) setCategoryFormError("");
+            }}
             style={{
               flex: 1,
               padding: "12px",
